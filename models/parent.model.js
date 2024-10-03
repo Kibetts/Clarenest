@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const parentSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
+    role: { type: String, default: 'parent' },
     password: { type: String, required: true },
     students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     finances: {
