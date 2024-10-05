@@ -1,6 +1,5 @@
 const Student = require('../models/student.model');
 
-// Get All Students
 const getAllStudents = async (req, res) => {
     try {
         const students = await Student.find().populate('class assignments attendance grades notifications');
@@ -10,7 +9,6 @@ const getAllStudents = async (req, res) => {
     }
 };
 
-// Get one student
 const getStudentById = async (req, res) => {
     try {
         const student = await Student.findById(req.params.id).populate('class assignments attendance grades notifications');
@@ -21,7 +19,6 @@ const getStudentById = async (req, res) => {
     }
 };
 
-// Create a Student
 const createStudent = async (req, res) => {
     const { name, email, password, classId } = req.body;
     try {
@@ -33,7 +30,6 @@ const createStudent = async (req, res) => {
     }
 };
 
-// Update a Student details
 const updateStudent = async (req, res) => {
     try {
         const updatedStudent = await Student.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -44,7 +40,6 @@ const updateStudent = async (req, res) => {
     }
 };
 
-// Delete a Student
 const deleteStudent = async (req, res) => {
     try {
         const deletedStudent = await Student.findByIdAndDelete(req.params.id);
@@ -54,10 +49,6 @@ const deleteStudent = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
-
-
-
-
 
 
 module.exports = {
