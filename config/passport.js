@@ -3,7 +3,7 @@ const ExtractJwt = require('passport-jwt').ExtractJwt;
 const Student = require('../models/student.model');
 const Tutor = require('../models/tutor.model');
 const Parent = require('../models/parent.model');
-const User = require('../models/user.model'); // not yet implemented general User model for admin
+const Admin = require('../models/admin.model');
 
 const opts = {
     jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -15,19 +15,31 @@ module.exports = (passport) => {
         new JwtStrategy(opts, async (jwt_payload, done) => {
             try {
                 let user = null;
+                let Model;
 
-                // Identify user role and load from corresponding model
-                if (jwt_payload.role === 'student') {
-                    user = await Student.findById(jwt_payload.id);
-                } else if (jwt_payload.role === 'tutor') {
-                    user = await Tutor.findById(jwt_payload.id);
-                } else if (jwt_payload.role === 'parent') {
-                    user = await Parent.findById(jwt_payload.id);
-                } else {
-                    user = await User.findById(jwt_payload.id);
+                switch (jwt_payload.role) {
+                    case 'student':
+                        Model = Student;
+                        break;
+                    case 'tutor':
+                        Model = Tutor;
+                        break;
+                    case 'parent':
+                        Model = Parent;
+                        break;
+                    case 'admin':
+                        Model = Admin;
+                        break;
+                    default:
+                        return done(null, false);
                 }
 
+                user = await Model.findById(jwt_payload.id)
+                    .select('-password')
+                    .exec();
+
                 if (user) {
+                    user.role = jwt_payload.role; 
                     return done(null, user);
                 }
                 return done(null, false);
