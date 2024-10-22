@@ -1,12 +1,71 @@
-const express = require('express');
-const router = express.Router();
-const studentController = require('../controllers/student.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+// const express = require('express');
+// const studentController = require('../controller/student.controller');
+// const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
+// const { ROLES } = require('../config/roles');
 
-router.get('/', authMiddleware, studentController.getAllStudents);
-router.get('/:id', authMiddleware, studentController.getStudentById);
-router.post('/', authMiddleware, studentController.createStudent);
-router.put('/:id', authMiddleware, studentController.updateStudent);
-router.delete('/:id', authMiddleware, studentController.deleteStudent);
+// const router = express.Router();
+
+// router.use(authenticateJWT);
+
+// router
+//     .route('/')
+//     .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), studentController.getAllStudents)
+//     .post(authorizeRoles(ROLES.ADMIN), studentController.createStudent);
+
+// router
+//     .route('/:id')
+//     .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), studentController.getStudent)
+//     .patch(authorizeRoles(ROLES.ADMIN), studentController.updateStudent)
+//     .delete(authorizeRoles(ROLES.ADMIN), studentController.deleteStudent);
+
+// router
+//     .route('/:id/courses')
+//     .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), studentController.getStudentCourses);
+
+// router
+//     .route('/:id/attendance')
+//     .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), studentController.getStudentAttendance);
+
+// router
+//     .route('/:id/status')
+//     .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT), studentController.getStudentStatus)
+//     .patch(authorizeRoles(ROLES.ADMIN, ROLES.STUDENT), studentController.updateStudentStatus);
+
+
+// module.exports = router;
+
+const express = require('express');
+const studentController = require('../controller/student.controller');
+const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
+const { ROLES } = require('../config/roles');
+
+const router = express.Router();
+
+router.use(authenticateJWT);
+
+router
+    .route('/')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), studentController.getAllStudents)
+    .post(authorizeRoles(ROLES.ADMIN), studentController.createStudent);
+
+router
+    .route('/:id')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), studentController.getStudent)
+    .patch(authorizeRoles(ROLES.ADMIN), studentController.updateStudent)
+    .delete(authorizeRoles(ROLES.ADMIN), studentController.deleteStudent);
+
+router
+    .route('/:id/subjects')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), studentController.getStudentSubjects);
+
+router
+    .route('/:id/attendance')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), studentController.getStudentAttendance);
+
+router
+    .route('/:id/status')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT), studentController.getStudentStatus)
+    .patch(authorizeRoles(ROLES.ADMIN, ROLES.STUDENT), studentController.updateStudentStatus);
+
 
 module.exports = router;

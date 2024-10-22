@@ -1,62 +1,77 @@
 const Notification = require('../models/notification.model');
+const AppError = require('../utils/appError');
 
-const getAllNotifications = async (req, res) => {
-    try {
-        const notifications = await Notification.find().populate('recipient');
-        res.status(200).json(notifications);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+
+exports.getUserNotifications = async (req, res, next) => {
+    const notifications = await Notification.find({ recipient: req.user.id })
+        .sort('-createdAt')
+        .populate('relatedItem');
+
+    res.status(200).json({
+        status: 'success',
+        results: notifications.length,
+        data: { notifications }
+    });
 };
 
-const getNotificationById = async (req, res) => {
-    try {
-        const notification = await Notification.findById(req.params.id).populate('recipient');
-        if (!notification) 
-            return res.status(404).json({ message: 'Notification not found' });
-        res.status(200).json(notification);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+exports.createNotification = async (req, res, next) => {
+    const newNotification = await Notification.create({
+        ...req.body,
+        recipient: req.body.recipientId
+    });
+
+    res.status(201).json({
+        status: 'success',
+        data: { notification: newNotification }
+    });
 };
 
-const createNotification = async (req, res) => {
-    const { message, recipientId } = req.body;
-    try {
-        const newNotification = new Notification({ message, recipient: recipientId });
-        const savedNotification = await newNotification.save();
-        res.status(201).json(savedNotification);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+exports.getNotification = async (req, res, next) => {
+    const notification = await Notification.findById(req.params.id).populate('relatedItem');
+
+    if (!notification) {
+        return next(new AppError('No notification found with that ID', 404));
     }
+
+    if (notification.recipient.toString() !== req.user.id && req.user.role !== 'admin') {
+        return next(new AppError('You do not have permission to view this notification', 403));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data: { notification }
+    });
 };
 
-const updateNotification = async (req, res) => {
-    try {
-        const updatedNotification = await Notification.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!updatedNotification) 
-            return res.status(404).json({ message: 'Notification not found' });
-        res.status(200).json({message:'notification updated successfully'});
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+exports.markNotificationAsRead = async (req, res, next) => {
+    const notification = await Notification.findById(req.params.id);
+
+    if (!notification) {
+        return next(new AppError('No notification found with that ID', 404));
     }
+
+    if (notification.recipient.toString() !== req.user.id && req.user.role !== 'admin') {
+        return next(new AppError('You do not have permission to update this notification', 403));
+    }
+
+    notification.read = true;
+    await notification.save();
+
+    res.status(200).json({
+        status: 'success',
+        data: { notification }
+    });
 };
 
-const deleteNotification = async (req, res) => {
-    try {
-        const deletedNotification = await Notification.findByIdAndDelete(req.params.id);
-        if (!deletedNotification) 
-            return res.status(404).json({ message: 'Notification not found' });
-        res.status(200).json({ message: 'Notification deleted successfully' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-};
+exports.deleteNotification = async (req, res, next) => {
+    const notification = await Notification.findByIdAndDelete(req.params.id);
 
-module.exports={
-    getAllNotifications,
-    getNotificationById,
-    createNotification,
-    updateNotification,
-    deleteNotification
-}
+    if (!notification) {
+        return next(new AppError('No notification found with that ID', 404));
+    }
+
+    res.status(204).json({
+        status: 'success',
+        data: null
+    });
+};

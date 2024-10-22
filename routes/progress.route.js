@@ -1,12 +1,25 @@
 const express = require('express');
-const router = express.Router();
-const progressController = require('../controllers/progress.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+const progressController = require('../controller/progress.controller');
+const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
+const { ROLES } = require('../config/roles');
 
-router.get('/', authMiddleware, progressController.getAllProgresses);
-router.get('/:id', authMiddleware, progressController.getProgressById);
-router.post('/', authMiddleware, progressController.createProgress);
-router.put('/:id', authMiddleware, progressController.updateProgress);
-router.delete('/:id', authMiddleware, progressController.deleteProgress);
+const router = express.Router();
+
+router.use(authenticateJWT);
+
+router
+    .route('/')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), progressController.getAllProgresses)
+    .post(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), progressController.createProgress);
+
+router
+    .route('/:id')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), progressController.getProgress)
+    .patch(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), progressController.updateProgress)
+    .delete(authorizeRoles(ROLES.ADMIN), progressController.deleteProgress);
+
+router
+    .route('/student/:studentId')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), progressController.getStudentProgress);
 
 module.exports = router;

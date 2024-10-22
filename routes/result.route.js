@@ -1,12 +1,25 @@
 const express = require('express');
-const router = express.Router();
-const resultController = require('../controllers/result.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+const resultController = require('../controller/result.controller');
+const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
+const { ROLES } = require('../config/roles');
 
-router.get('/', authMiddleware, resultController.getAllResults);
-router.get('/:id', authMiddleware, resultController.getResultById);
-router.post('/', authMiddleware, resultController.createResult);
-router.put('/:id', authMiddleware, resultController.updateResult);
-router.delete('/:id', authMiddleware, resultController.deleteResult);
+const router = express.Router();
+
+router.use(authenticateJWT);
+
+router
+    .route('/')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), resultController.getAllResults)
+    .post(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), resultController.createResult);
+
+router
+    .route('/:id')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), resultController.getResult)
+    .patch(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), resultController.updateResult)
+    .delete(authorizeRoles(ROLES.ADMIN), resultController.deleteResult);
+
+router
+    .route('/student/:studentId')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), resultController.getStudentResults);
 
 module.exports = router;

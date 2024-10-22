@@ -1,21 +1,28 @@
-// const errorHandler = (err, req, res, next) => {
-//     console.error(err.stack);
+const errorHandler = (err, req, res, next) => {
+    err.statusCode = err.statusCode || 500;
+    err.status = err.status || 'error';
 
-//     if (err.name === 'ValidationError') {
-//         return res.status(400).json({ 
-//             message: 'Validation Error', 
-//             errors: Object.values(err.errors).map(e => e.message) 
-//         });
-//     }
+    if (process.env.NODE_ENV === 'development') {
+        res.status(err.statusCode).json({
+            status: err.status,
+            error: err,
+            message: err.message,
+            stack: err.stack
+        });
+    } else if (process.env.NODE_ENV === 'production') {
+        if (err.isOperational) {
+            res.status(err.statusCode).json({
+                status: err.status,
+                message: err.message
+            });
+        } else {
+            console.error('ERROR 💥', err);
+            res.status(500).json({
+                status: 'error',
+                message: 'Something went wrong!'
+            });
+        }
+    }
+};
 
-//     if (err.name === 'JsonWebTokenError') {
-//         return res.status(401).json({ message: 'Invalid token' });
-//     }
-
-//     res.status(500).json({ 
-//         message: 'Internal Server Error',
-//         error: process.env.NODE_ENV === 'development' ? err.message : undefined
-//     });
-// };
-
-// module.exports = errorHandler;
+module.exports = errorHandler;

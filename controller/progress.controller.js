@@ -1,61 +1,74 @@
 const Progress = require('../models/progress.model');
+const AppError = require('../utils/appError');
 
-const getAllProgress = async (req, res)=>{
-    try {
-        const progress = await Progress.find.populate('student course');
-        res.status(200).json(progress);
-    } catch (error) {
-        res.status(500).json({error:err.message})
+
+exports.getAllProgresses = async (req, res, next) => {
+    const progresses = await Progress.find().populate('student course');
+
+    res.status(200).json({
+        status: 'success',
+        results: progresses.length,
+        data: { progresses }
+    });
+};
+
+exports.createProgress = async (req, res, next) => {
+    const newProgress = await Progress.create(req.body);
+
+    res.status(201).json({
+        status: 'success',
+        data: { progress: newProgress }
+    });
+};
+
+exports.getProgress = async (req, res, next) => {
+    const progress = await Progress.findById(req.params.id).populate('student course');
+
+    if (!progress) {
+        return next(new AppError('No progress found with that ID', 404));
     }
-}
 
-const getProgressById = async (req, res)=>{
-    try {
-        const progress = await Progress.findByid(req.params.id).populate('student course')
-        if(!progress) 
-            return res.status(404).json({message: 'progress not found'})
-        res.status(200).json(progress)
-    } catch (error) {
-        res.status(500).json({error:err.message})
+    res.status(200).json({
+        status: 'success',
+        data: { progress }
+    });
+};
+
+exports.updateProgress = async (req, res, next) => {
+    const progress = await Progress.findByIdAndUpdate(req.params.id, req.body, {
+        new: true,
+        runValidators: true
+    });
+
+    if (!progress) {
+        return next(new AppError('No progress found with that ID', 404));
     }
-}
 
-const createProgress = async (req, res)=>{
-    const {studentId, courseId, status} = req.body
-    try {
-        const newProgress = new Progress({student:studentId, course:courseId, status});
-        const savedProgress = await newProgress.save();
-        res.status(201).json(savedProgress);
-    } catch (error) {
-        res.status(400).json({error:error.message});
+    res.status(200).json({
+        status: 'success',
+        data: { progress }
+    });
+};
+
+exports.deleteProgress = async (req, res, next) => {
+    const progress = await Progress.findByIdAndDelete(req.params.id);
+
+    if (!progress) {
+        return next(new AppError('No progress found with that ID', 404));
     }
-}
 
-const updateProgress = async (req, res)=>{
-    try {
-        const updatedProgress = await Progress.findByIdAndUpdate(req.params.id, req.body, {new:true});
-    if(!updatedProgress) return res.status(400).json({message:'progress not found'});
-        res.status(200).json({message:'progress updated successfully'});
-    } catch (error) {
-        res.status(404).json({error:error.message});
-    }
-}
+    res.status(204).json({
+        status: 'success',
+        data: null
+    });
+};
 
-const deleteProgress = async (req, res)=>{
-    try {
-        const deletedProgress = await Progress.findByIdAndDelete(req.params.id);
-        if(!deletedProgress) 
-            return res.status(400).json({message:'progress not found'});
-        res.status(200).json({message:'progress deleted successfuly'})
-    } catch (error) {
-        res.status(404).json({error:error.message});
-    }
-}
+exports.getStudentProgress = async (req, res, next) => {
+    const progress = await Progress.find({ student: req.params.studentId }).populate('course');
 
-module.exports={
-    getAllProgress,
-    getProgressById,
-    createProgress,
-    updateProgress,
-    deleteProgress
-}
+    res.status(200).json({
+        status: 'success',
+        results: progress.length,
+        data: { progress }
+    });
+};

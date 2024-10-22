@@ -1,12 +1,34 @@
 const express = require('express');
-const router = express.Router();
-const parentController = require('../controllers/parent.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+const parentController = require('../controller/parent.controller');
+const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
+const { ROLES } = require('../config/roles');
 
-router.get('/', authMiddleware, parentController.getAllParents);
-router.get('/:id', authMiddleware, parentController.getParentById);
-router.post('/', authMiddleware, parentController.createParent);
-router.put('/:id', authMiddleware, parentController.updateParent);
-router.delete('/:id', authMiddleware, parentController.deleteParent);
+const router = express.Router();
+
+router.use(authenticateJWT);
+
+router
+    .route('/')
+    .get(authorizeRoles(ROLES.ADMIN), parentController.getAllParents)
+    .post(authorizeRoles(ROLES.ADMIN), parentController.createParent);
+
+router
+    .route('/:id')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.PARENT), parentController.getParent)
+    .patch(authorizeRoles(ROLES.ADMIN, ROLES.PARENT), parentController.updateParent)
+    .delete(authorizeRoles(ROLES.ADMIN), parentController.deleteParent);
+
+router
+    .route('/:id/finances')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.PARENT), parentController.getParentFinances)
+    .patch(authorizeRoles(ROLES.ADMIN), parentController.updateParentFinances);
+
+
+router
+    .route('/:id/children')
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.PARENT), parentController.getParentChildren);
+
+
+router.get('/child/:childId/assessments', authorizeRoles(ROLES.PARENT), parentController.getChildAssessments);
 
 module.exports = router;

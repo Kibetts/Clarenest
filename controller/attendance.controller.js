@@ -1,62 +1,129 @@
+// const Attendance = require('../models/attendance.model');
+// const AppError = require('../utils/appError');
+
+// exports.getAllAttendances = async (req, res, next) => {
+//     const attendances = await Attendance.find().populate('class');
+//     res.status(200).json({
+//         status: 'success',
+//         results: attendances.length,
+//         data: { attendances }
+//     });
+// };
+
+// exports.createAttendance = async (req, res, next) => {
+//     const newAttendance = await Attendance.create(req.body);
+//     res.status(201).json({
+//         status: 'success',
+//         data: { attendance: newAttendance }
+//     });
+// };
+
+// exports.getAttendance = async (req, res, next) => {
+//     const attendance = await Attendance.findById(req.params.id).populate('class');
+//     if (!attendance) {
+//         return next(new AppError('No attendance found with that ID', 404));
+//     }
+//     res.status(200).json({
+//         status: 'success',
+//         data: { attendance }
+//     });
+// };
+
+// exports.updateAttendance = async (req, res, next) => {
+//     const attendance = await Attendance.findByIdAndUpdate(req.params.id, req.body, {
+//         new: true,
+//         runValidators: true
+//     });
+//     if (!attendance) {
+//         return next(new AppError('No attendance found with that ID', 404));
+//     }
+//     res.status(200).json({
+//         status: 'success',
+//         data: { attendance }
+//     });
+// };
+
+// exports.deleteAttendance = async (req, res, next) => {
+//     const attendance = await Attendance.findByIdAndDelete(req.params.id);
+//     if (!attendance) {
+//         return next(new AppError('No attendance found with that ID', 404));
+//     }
+//     res.status(204).json({
+//         status: 'success',
+//         data: null
+//     });
+// };
+
+// exports.getAttendanceByClass = async (req, res, next) => {
+//     const attendances = await Attendance.find({ class: req.params.classId }).populate('class');
+//     res.status(200).json({
+//         status: 'success',
+//         results: attendances.length,
+//         data: { attendances }
+//     });
+// };
+
 const Attendance = require('../models/attendance.model');
+const AppError = require('../utils/appError');
 
-const getAllAttendance = async (req, res)=>{
-    try {
-        const attendance = Attendance.find.populate('student class');
-        res.status(200).json(attendance);
-    } catch (error) {
-        res.status(400).json({error:error.message});
-    }
-}
-
-const getAttendanceById = async (req, res)=>{
-    req.params.id= id;
-    try {
-        const attendance = await Attendance.findById(id).populate('student class');
-        if(!attendance)
-            return res.status(404).json('attendance not found');
-        res.status(200).json(attendance);
-    } catch (error) {
-        res.status(400).json({error:error.message});
-    };
+exports.getAllAttendances = async (req, res, next) => {
+    const attendances = await Attendance.find().populate('lesson');
+    res.status(200).json({
+        status: 'success',
+        results: attendances.length,
+        data: { attendances }
+    });
 };
 
-const createAttendance = async (req, res)=>{
-    const {studentId, classId, date, status} = req.body;
-    try {
-        const newattendance = new Attendance({student:studentId, class:classId, date, status});
-        const savedAttendance = await newattendance.save();
-        res.status(201).json(savedAttendance)
-    } catch (error) {
-        res.status(400).json({message:error.message});
-    }
-}
-
-const updateAttendance = async (req, res) => {
-    try {
-        const updatedAttendance = await Attendance.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!updatedAttendance) 
-            return res.status(404).json({ message: 'Attendance record not found' });
-        res.status(200).json(updatedAttendance);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+exports.createAttendance = async (req, res, next) => {
+    const newAttendance = await Attendance.create(req.body);
+    res.status(201).json({
+        status: 'success',
+        data: { attendance: newAttendance }
+    });
 };
 
-const deleteAttendance = async (req, res) => {
-    try {
-        const deletedAttendance = await Attendance.findByIdAndDelete(req.params.id);
-        if (!deletedAttendance) return res.status(404).json({ message: 'Attendance record not found' });
-        res.status(200).json({ message: 'Attendance record deleted successfully' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+exports.getAttendance = async (req, res, next) => {
+    const attendance = await Attendance.findById(req.params.id).populate('lesson');
+    if (!attendance) {
+        return next(new AppError('No attendance found with that ID', 404));
     }
+    res.status(200).json({
+        status: 'success',
+        data: { attendance }
+    });
 };
 
-module.exports={
-    getAllAttendance,
-    getAttendanceById,
-    createAttendance,
-    updateAttendance,
-    deleteAttendance
-}
+exports.updateAttendance = async (req, res, next) => {
+    const attendance = await Attendance.findByIdAndUpdate(req.params.id, req.body, {
+        new: true,
+        runValidators: true
+    });
+    if (!attendance) {
+        return next(new AppError('No attendance found with that ID', 404));
+    }
+    res.status(200).json({
+        status: 'success',
+        data: { attendance }
+    });
+};
+
+exports.deleteAttendance = async (req, res, next) => {
+    const attendance = await Attendance.findByIdAndDelete(req.params.id);
+    if (!attendance) {
+        return next(new AppError('No attendance found with that ID', 404));
+    }
+    res.status(204).json({
+        status: 'success',
+        data: null
+    });
+};
+
+exports.getAttendanceByLesson = async (req, res, next) => {
+    const attendances = await Attendance.find({ lesson: req.params.lessonId }).populate('lesson');
+    res.status(200).json({
+        status: 'success',
+        results: attendances.length,
+        data: { attendances }
+    });
+};

@@ -1,79 +1,86 @@
-// const mongoose = require('mongoose');
-
-// const tutorSchema = new mongoose.Schema({
-//     name: { type: String, required: true },
-//     email: { type: String, required: true, unique: true },
-//     role: { type: String, default: 'tutor' },
-//     password: { type: String, required: true },
-//     subjects: [{ type: String }],
-//     classes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Class' }],
-//     admin: { type: Boolean, default: false },
-//     notifications: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Notification' }]
-// });
-
-// module.exports = mongoose.model('Tutor', tutorSchema);
-
-
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const User = require('./user.model');
 
 const tutorSchema = new mongoose.Schema({
-    name: {
+    subjects: [{
         type: String,
-        required: [true, 'Name is required']
-    },
-    email: {
-        type: String,
-        required: [true, 'Email is required'],
-        unique: true,
-        validate: {
-            validator: function (v) {
-                return /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(v);
-            },
-            message: 'Please enter a valid email'
-        }
-    },
-    password: {
-        type: String,
-        required: [true, 'Password is required'],
-        minlength: 6
-    },
-  
-    subject: {
-        type: String,
-        required: [true, 'Subject is required']
-    },
-    role: {
-        type: String,
-        enum: ['tutor'],
-        default: 'tutor'
-    },
+        required: [true, 'At least one subject is required']
+    }],
     assignedClasses: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Class'
     }],
-    phoneNumber: {
-        type: String,
-        validate: {
-            validator: function (v) {
-                return /^\d{10,15}$/.test(v); // Validates a phone number of 10-15 digits
-            },
-            message: 'Please enter a valid phone number'
-        }
+    qualifications: [{
+        degree: String,
+        institution: String,
+        year: Number
+    }],
+    yearsOfExperience: {
+        type: Number,
+        required: [true, 'Years of experience is required'],
+        min: 0
     },
-    admin: { type: Boolean, default: false },
-    notifications: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Notification' }]
-});
+    availability: [{
+        day: {
+            type: String,
+            enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        },
+        startTime: String,
+        endTime: String
+    }],
+    status: {
+        type: String,
+        enum: ['online', 'offline'],
+        default: 'offline'
+    },
+    lastActive: {
+        type: Date,
+        default: Date.now
+    },
+    reviews: [{
+        student: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        rating: Number,
+        comment: String,
+        date: {
+            type: Date,
+            default: Date.now
+        }
+    }]
+}, { timestamps: true });
 
-tutorSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next();
-    this.password = await bcrypt.hash(this.password, 12);
+tutorSchema.pre('save', function(next) {
+    if (this.isNew) {
+        this.role = 'tutor';
+    }
     next();
 });
 
-tutorSchema.methods.isPasswordValid = function (password) {
-    return bcrypt.compare(password, this.password);
+tutorSchema.methods.calculateAverageRating = function() {
+    if (this.reviews.length === 0) {
+        this.rating = 0;
+    } else {
+        const totalRating = this.reviews.reduce((sum, review) => sum + review.rating, 0);
+        this.rating = totalRating / this.reviews.length;
+    }
 };
 
-const Tutor = mongoose.model('Tutor', tutorSchema);
+tutorSchema.methods.updateStatus = function(status) {
+    this.status = status;
+    this.lastActive = new Date();
+};
+
+tutorSchema.methods.assignClass = function(classId) {
+    if (!this.assignedClasses.includes(classId)) {
+        this.assignedClasses.push(classId);
+    }
+};
+
+tutorSchema.methods.removeAssignedClass = function(classId) {
+    this.assignedClasses = this.assignedClasses.filter(id => id.toString() !== classId.toString());
+};
+
+const Tutor = User.discriminator('Tutor', tutorSchema);
 module.exports = Tutor;

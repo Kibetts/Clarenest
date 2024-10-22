@@ -1,34 +1,124 @@
-const mongoose = require("mongoose");
+// const mongoose = require('mongoose');
 
-const resultSchema = new mongoose.Schema(
-  {
+// const resultSchema = new mongoose.Schema({
+//     student: {
+//         type: mongoose.Schema.Types.ObjectId,
+//         ref: 'User',
+//         required: [true, 'Student reference is required']
+//     },
+//     course: {
+//         type: mongoose.Schema.Types.ObjectId,
+//         ref: 'Course',
+//         required: [true, 'Course reference is required']
+//     },
+//     assignments: [{
+//         assignment: {
+//             type: mongoose.Schema.Types.ObjectId,
+//             ref: 'Assignment'
+//         },
+//         score: Number,
+//         maxScore: Number
+//     }],
+//     finalExam: {
+//         score: Number,
+//         maxScore: Number
+//     },
+//     overallGrade: {
+//         type: String,
+//         enum: ['A', 'B', 'C', 'D', 'F']
+//     },
+//     comments: String,
+//     issuedDate: {
+//         type: Date,
+//         default: Date.now
+//     }
+// }, { timestamps: true });
+
+// resultSchema.methods.calculateOverallGrade = function() {
+//     let totalScore = 0;
+//     let totalMaxScore = 0;
+
+//     this.assignments.forEach(assignment => {
+//         totalScore += assignment.score;
+//         totalMaxScore += assignment.maxScore;
+//     });
+
+//     if (this.finalExam) {
+//         totalScore += this.finalExam.score;
+//         totalMaxScore += this.finalExam.maxScore;
+//     }
+
+//     const percentageScore = (totalScore / totalMaxScore) * 100;
+
+//     if (percentageScore >= 90) this.overallGrade = 'A';
+//     else if (percentageScore >= 80) this.overallGrade = 'B';
+//     else if (percentageScore >= 70) this.overallGrade = 'C';
+//     else if (percentageScore >= 60) this.overallGrade = 'D';
+//     else this.overallGrade = 'F';
+// };
+
+// const Result = mongoose.model('Result', resultSchema);
+// module.exports = Result;
+
+
+const mongoose = require('mongoose');
+
+const resultSchema = new mongoose.Schema({
     student: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Student",
-      required: true,
-    },
-    class: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Class",
-      required: true,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: [true, 'Student reference is required']
     },
     subject: {
-      type: String,
-      required: [true, "Subject is required"],
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Subject',
+        required: [true, 'Subject reference is required']
     },
-    examDate: {
-      type: Date,
-      required: [true, "Exam date is required"],
+    assignments: [{
+        assignment: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Assignment'
+        },
+        score: Number,
+        maxScore: Number
+    }],
+    finalExam: {
+        score: Number,
+        maxScore: Number
     },
-    grades: [
-      {
-        assignment: { type: mongoose.Schema.Types.ObjectId, ref: "Assignment" },
-        grade: { type: String },
-      },
-    ],
-  },
-  { timestamps: true }
-);
+    overallGrade: {
+        type: String,
+        enum: ['A', 'B', 'C', 'D', 'F']
+    },
+    comments: String,
+    issuedDate: {
+        type: Date,
+        default: Date.now
+    }
+}, { timestamps: true });
 
-const Result = mongoose.model("Result", resultSchema);
+resultSchema.methods.calculateOverallGrade = function() {
+    let totalScore = 0;
+    let totalMaxScore = 0;
+
+    this.assignments.forEach(assignment => {
+        totalScore += assignment.score;
+        totalMaxScore += assignment.maxScore;
+    });
+
+    if (this.finalExam) {
+        totalScore += this.finalExam.score;
+        totalMaxScore += this.finalExam.maxScore;
+    }
+
+    const percentageScore = (totalScore / totalMaxScore) * 100;
+
+    if (percentageScore >= 90) this.overallGrade = 'A';
+    else if (percentageScore >= 80) this.overallGrade = 'B';
+    else if (percentageScore >= 70) this.overallGrade = 'C';
+    else if (percentageScore >= 60) this.overallGrade = 'D';
+    else this.overallGrade = 'F';
+};
+
+const Result = mongoose.model('Result', resultSchema);
 module.exports = Result;

@@ -1,59 +1,77 @@
 const Result = require('../models/result.model');
+const AppError = require('../utils/appError');
 
-const getAllResults = async (req, res) => {
-    try {
-        const results = await Result.find().populate('student course');
-        res.status(200).json(results);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+
+exports.getAllResults = async (req, res, next) => {
+    const results = await Result.find().populate('student course');
+
+    res.status(200).json({
+        status: 'success',
+        results: results.length,
+        data: { results }
+    });
 };
 
-const getResultById = async (req, res) => {
-    try {
-        const result = await Result.findById(req.params.id).populate('student course');
-        if (!result) return res.status(404).json({ message: 'Result not found' });
-        res.status(200).json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+exports.createResult = async (req, res, next) => {
+    const newResult = await Result.create(req.body);
+
+    res.status(201).json({
+        status: 'success',
+        data: { result: newResult }
+    });
 };
 
-const createResult = async (req, res) => {
-    const { studentId, courseId, grade } = req.body;
-    try {
-        const newResult = new Result({ student: studentId, course: courseId, grade });
-        const savedResult = await newResult.save();
-        res.status(201).json(savedResult);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+exports.getResult = async (req, res, next) => {
+    const result = await Result.findById(req.params.id).populate('student course');
+
+    if (!result) {
+        return next(new AppError('No result found with that ID', 404));
     }
+
+    res.status(200).json({
+        status: 'success',
+        data: { result }
+    });
 };
 
-const updateResult = async (req, res) => {
-    try {
-        const updatedResult = await Result.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!updatedResult) return res.status(404).json({ message: 'Result not found' });
-        res.status(200).json(updatedResult);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+exports.updateResult = async (req, res, next) => {
+    const result = await Result.findByIdAndUpdate(req.params.id, req.body, {
+        new: true,
+        runValidators: true
+    });
+
+    if (!result) {
+        return next(new AppError('No result found with that ID', 404));
     }
+
+    result.calculateOverallGrade();
+    await result.save();
+
+    res.status(200).json({
+        status: 'success',
+        data: { result }
+    });
 };
 
-const deleteResult = async (req, res) => {
-    try {
-        const deletedResult = await Result.findByIdAndDelete(req.params.id);
-        if (!deletedResult) return res.status(404).json({ message: 'Result not found' });
-        res.status(200).json({ message: 'Result deleted successfully' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+exports.deleteResult = async (req, res, next) => {
+    const result = await Result.findByIdAndDelete(req.params.id);
+
+    if (!result) {
+        return next(new AppError('No result found with that ID', 404));
     }
+
+    res.status(204).json({
+        status: 'success',
+        data: null
+    });
 };
 
-module.exports= {
-    getAllResults,
-    createResult,
-    getResultById,
-    updateResult,
-    deleteResult
-}
+exports.getStudentResults = async (req, res, next) => {
+    const results = await Result.find({ student: req.params.studentId }).populate('course');
+
+    res.status(200).json({
+        status: 'success',
+        results: results.length,
+        data: { results }
+    });
+};

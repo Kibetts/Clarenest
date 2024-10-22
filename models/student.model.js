@@ -1,48 +1,115 @@
+// const mongoose = require('mongoose');
+// const User = require('./user.model');
+
+// const studentSchema = new mongoose.Schema({
+//     enrollmentDate: {
+//         type: Date,
+//         default: Date.now
+//     },
+//     grade: {
+//         type: String,
+//         required: [true, 'Grade level is required'],
+//         enum: ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']
+//     },
+//     courses: [{
+//         type: mongoose.Schema.Types.ObjectId,
+//         ref: 'Course'
+//     }],
+//     parent: {
+//         type: mongoose.Schema.Types.ObjectId,
+//         ref: 'Parent'
+//     },
+//     attendanceRecord: [{
+//         date: Date,
+//         status: {
+//             type: String,
+//             enum: ['Present', 'Absent', 'Late']
+//         }
+//     }],
+//     status: {
+//         type: String,
+//         enum: ["online", "offline"],
+//         default: "offline",
+//     },
+//     lastActive: {
+//         type: Date,
+//         default: Date.now,
+//     },
+// }, { timestamps: true });
+
+// studentSchema.pre('save', function(next) {
+//     if (this.isNew) {
+//         this.role = 'student';
+//     }
+//     next();
+// });
+
+// studentSchema.methods.updateStatus = function(status) {
+//     this.status = status;
+//     this.lastActive = new Date();
+// };
+
+// const Student = User.discriminator('Student', studentSchema);
+// module.exports = Student;
+
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const User = require('./user.model');
 
 const studentSchema = new mongoose.Schema({
-    name: { 
-        type: String, 
-        required: [true, 'Name is required'] 
+    enrollmentDate: {
+        type: Date,
+        default: Date.now
     },
-    email: {
-        type: String,
-        required: [true, 'Email is required'],
-        unique: true,
-        validate: {
-            validator: function (v) {
-                return /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(v);
-            },
-            message: 'Please enter a valid email'
+    grade: {
+        type: Number,
+        required: [true, 'Grade level is required'],
+        min: 1,
+        max: 12
+    },
+    subjects: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Subject'
+    }],
+    parent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Parent'
+    },
+    attendanceRecord: [{
+        date: Date,
+        status: {
+            type: String,
+            enum: ['Present', 'Absent', 'Late']
         }
-    },
-    password: {
+    }],
+    status: {
         type: String,
-        required: [true, 'Password is required'],
-        minlength: 6
+        enum: ["online", "offline"],
+        default: "offline",
     },
-    role: {
-        type: String,
-        enum: ['student'],
-        default: 'student'
+    lastActive: {
+        type: Date,
+        default: Date.now,
     },
-    class: { type: mongoose.Schema.Types.ObjectId, ref: 'Class' },
-    assignments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Assignment' }],
-    attendance: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Attendance' }],
-    grades: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Result' }],
-    notifications: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Notification' }]
+}, { timestamps: true });
+
+studentSchema.virtual('assessmentSubmissions', {
+    ref: 'AssessmentSubmission',
+    localField: '_id',
+    foreignField: 'student'
 });
 
-studentSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next();
-    this.password = await bcrypt.hash(this.password, 12);
+
+studentSchema.pre('save', function(next) {
+    if (this.isNew) {
+        this.role = 'student';
+    }
     next();
 });
 
-studentSchema.methods.isPasswordValid = function (password) {
-    return bcrypt.compare(password, this.password);
+studentSchema.methods.updateStatus = function(status) {
+    this.status = status;
+    this.lastActive = new Date();
 };
 
-const Student = mongoose.model('Student', studentSchema);
+const Student = User.discriminator('Student', studentSchema);
 module.exports = Student;

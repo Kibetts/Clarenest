@@ -1,12 +1,21 @@
 const express = require('express');
-const router = express.Router();
-const notificationController = require('../controllers/notification.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+const notificationController = require('../controller/notification.controller');
+const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
+const { ROLES } = require('../config/roles');
 
-router.get('/', authMiddleware, notificationController.getAllNotifications);
-router.get('/:id', authMiddleware, notificationController.getNotificationById);
-router.post('/', authMiddleware, notificationController.createNotification);
-router.put('/:id', authMiddleware, notificationController.updateNotification);
-router.delete('/:id', authMiddleware, notificationController.deleteNotification);
+const router = express.Router();
+
+router.use(authenticateJWT);
+
+router
+    .route('/')
+    .get(notificationController.getUserNotifications)
+    .post(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), notificationController.createNotification);
+
+router
+    .route('/:id')
+    .get(notificationController.getNotification)
+    .patch(notificationController.markNotificationAsRead)
+    .delete(authorizeRoles(ROLES.ADMIN), notificationController.deleteNotification);
 
 module.exports = router;
