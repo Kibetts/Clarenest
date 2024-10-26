@@ -1,3 +1,4 @@
+const mongoose = require('mongoose')
 const studentApplicationSchema = new mongoose.Schema({
     personalInfo: {
         fullName: {

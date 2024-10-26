@@ -19,11 +19,11 @@ exports.submitStudentApplication = async (req, res, next) => {
             return next(new AppError(error.details[0].message, 400));
         }
 
-        // Check if email already exists
+        // Check if email already exists - Fixed the model reference
         const existingApplication = await StudentApplication.findOne({
             'personalInfo.email': req.body.personalInfo.email,
             status: { $in: ['pending', 'approved'] }
-        });
+        }).exec();  // Added .exec()
 
         if (existingApplication) {
             return next(new AppError('An application with this email already exists', 400));
@@ -50,6 +50,7 @@ exports.submitStudentApplication = async (req, res, next) => {
             }
         });
     } catch (err) {
+        console.error('Application submission error:', err);  // Added error logging
         next(new AppError('Error submitting application: ' + err.message, 500));
     }
 };
