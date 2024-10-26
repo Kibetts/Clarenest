@@ -33,8 +33,11 @@ exports.recordPayment = async (req, res, next) => {
         await student.save();
 
         // Send notification to student
-        await sendNotification(student._id, 'Fee Payment Recorded', `A payment of ${amount} has been recorded for your account.`);
-
+        await sendNotification(
+            student._id,
+            `A payment of ${amount} has been recorded for your account.`,
+            'Other'
+        );
         res.status(201).json({
             status: 'success',
             data: {
@@ -62,8 +65,11 @@ exports.grantTemporaryAccess = async (req, res, next) => {
         await student.save();
 
         // Send notification to student
-        await sendNotification(student._id, 'Temporary Access Granted', `You have been granted temporary access for ${durationInDays} days.`);
-
+        await sendNotification(
+            student._id,
+            `You have been granted temporary access for ${durationInDays} days.`,
+            'Other'
+        );
         res.status(200).json({
             status: 'success',
             data: {

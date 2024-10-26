@@ -7,6 +7,9 @@ const router = express.Router();
 
 router.use(authenticateJWT);
 
+router.post('/register/:studentId', parentController.registerParent);
+router.post('/verify/:token', parentController.verifyParentAccount);
+
 router
     .route('/')
     .get(authorizeRoles(ROLES.ADMIN), parentController.getAllParents)

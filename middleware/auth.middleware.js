@@ -51,18 +51,24 @@ const User = require('../models/user.model');
 
 exports.authenticateJWT = async (req, res, next) => {
     try {
+        console.log('Auth middleware - headers:', req.headers);
         let token;
         if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
             token = req.headers.authorization.split(' ')[1];
+            console.log('Token found:', token);
         }
 
         if (!token) {
+            console.log('No token found');
             return res.status(401).json({ message: 'You are not logged in. Please log in to get access.' });
         }
 
         const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+        console.log('Decoded token:', decoded);
 
         const currentUser = await User.findById(decoded.id);
+        console.log('User found:', currentUser);
+
         if (!currentUser) {
             return res.status(401).json({ message: 'The user belonging to this token no longer exists.' });
         }

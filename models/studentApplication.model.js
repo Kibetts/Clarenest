@@ -1,5 +1,3 @@
-const mongoose = require('mongoose');
-
 const studentApplicationSchema = new mongoose.Schema({
     personalInfo: {
         fullName: {
@@ -18,22 +16,32 @@ const studentApplicationSchema = new mongoose.Schema({
     },
     educationalInfo: {
         currentGradeLevel: {
-            type: Number,
+            type: String,
             required: true,
-            min: 1,
-            max: 12
+            enum: ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th']
         },
-        lastSchoolAttended: String,
-        interestedSubjects: [String]
+        lastSchoolAttended: String
     },
     parentInfo: {
         name: String,
         email: String,
-        phoneNumber: String
+        phoneNumber: String,
+        relationship: {
+            type: String,
+            enum: ['Mother', 'Father', 'Guardian', 'Other'],
+            required: true
+        },
+        parentRegistrationComplete: {
+            type: Boolean,
+            default: false
+        }
     },
     learningPreferences: {
-        preferredSchedule: String,
-        learningInterests: [String]
+        scheduleType: {
+            type: String,
+            enum: ['full time', 'afterclasses'],
+            required: true
+        }
     },
     specialNeeds: {
         hasSpecialNeeds: Boolean,
@@ -47,6 +55,3 @@ const studentApplicationSchema = new mongoose.Schema({
     accountCreationToken: String,
     accountCreationTokenExpires: Date
 }, { timestamps: true });
-
-const StudentApplication = mongoose.model('StudentApplication', studentApplicationSchema);
-module.exports = StudentApplication;

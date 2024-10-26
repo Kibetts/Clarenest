@@ -78,12 +78,14 @@ feeStatus: {
     },
     isEmailVerified: {
         type: Boolean,
-        default: true   // Return to false
-      },
-      verificationToken: String,
-      verificationTokenExpires: Date,
-      
+        default: false
+    },
+    verificationToken: String,
+    verificationTokenExpires: Date,
+    accountCreationToken: String,
+    accountCreationTokenExpires: Date,
     nextPaymentDue: Date,
+    
     grade: {
         type: String,
         enum: ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'],
@@ -105,6 +107,22 @@ userSchema.methods.correctPassword = async function(candidatePassword, userPassw
     const isMatch = await bcrypt.compare(candidatePassword, userPassword);
     console.log('Password match:', isMatch);
     return isMatch;
+};
+
+userSchema.methods.createVerificationToken = function() {
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    this.verificationToken = crypto.createHash('sha256')
+        .update(verificationToken)
+        .digest('hex');
+    this.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+    return verificationToken;
+};
+
+userSchema.methods.verifyEmail = function() {
+    this.isEmailVerified = true;
+    this.verificationToken = undefined;
+    this.verificationTokenExpires = undefined;
+    this.status = 'active';
 };
 
 userSchema.pre('save', async function(next) {

@@ -3,10 +3,12 @@ const router = express.Router();
 const applicationController = require('../controller/application.controller');
 const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
 const { ROLES } = require('../config/roles');
+const uploadMiddleware = require('../middleware/fileUpload.middleware');
 
 // Public routes
 router.post('/student', applicationController.submitStudentApplication);
-router.post('/tutor', applicationController.submitTutorApplication);
+
+router.post('/tutor', uploadMiddleware.tutorApplication, applicationController.submitTutorApplication);
 
 // Protected routes
 router.use(authenticateJWT);

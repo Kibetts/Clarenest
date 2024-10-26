@@ -1,22 +1,34 @@
 const express = require('express');
-const feeManagementController = require('../controller/feePayment.controller');
+const router = express.Router();
+const feePaymentController = require('../controller/feePayment.controller');
 const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
 const { ROLES } = require('../config/roles');
 
-const router = express.Router();
-
+// All routes require authentication
 router.use(authenticateJWT);
 
-router
-    .route('/record-payment')
-    .post(authorizeRoles(ROLES.ADMIN), feeManagementController.recordPayment);
+// Record payment - Admin only
+router.post('/record-payment', 
+    authorizeRoles(ROLES.ADMIN), 
+    feePaymentController.recordPayment
+);
 
-router
-    .route('/grant-temporary-access')
-    .post(authorizeRoles(ROLES.ADMIN), feeManagementController.grantTemporaryAccess);
+// Grant temporary access - Admin only
+router.post('/grant-temporary-access', 
+    authorizeRoles(ROLES.ADMIN), 
+    feePaymentController.grantTemporaryAccess
+);
 
-router
-    .route('/payment-history/:studentId')
-    .get(authorizeRoles(ROLES.ADMIN, ROLES.STUDENT, ROLES.PARENT), feeManagementController.getPaymentHistory);
+// Get payment history - Available to admin, student (their own), and parent (their children)
+router.get('/payment-history/:studentId?', 
+    authorizeRoles(ROLES.ADMIN, ROLES.STUDENT, ROLES.PARENT), 
+    feePaymentController.getPaymentHistory
+);
+
+// Get all payment history - Admin only
+router.get('/payment-history', 
+    authorizeRoles(ROLES.ADMIN), 
+    feePaymentController.getPaymentHistory
+);
 
 module.exports = router;

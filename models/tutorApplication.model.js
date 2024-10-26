@@ -1,14 +1,20 @@
 const mongoose = require('mongoose');
+
 const tutorApplicationSchema = new mongoose.Schema({
     user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        // required: false
     },
     personalInfo: {
         fullName: {
             type: String,
             required: true
+        },
+        email: {
+            type: String,
+            required: true,
+            unique: true  
         },
         dateOfBirth: Date,
         nationality: String,
@@ -20,9 +26,10 @@ const tutorApplicationSchema = new mongoose.Schema({
         subjectsSpecialization: [String],
         certifications: [String],
         preferredGradeLevels: [{
-            type: Number,
-            min: 1,
-            max: 12
+            type: String,
+            enum: ['1st', '2nd', '3rd', '4th', '5th', '6th', 
+                   '7th', '8th', '9th', '10th', '11th', '12th'],
+            required: true
         }],
         availability: [String]
     },
@@ -31,9 +38,21 @@ const tutorApplicationSchema = new mongoose.Schema({
         languagesSpoken: [String]
     },
     documents: {
-        cv: String, // URL to uploaded document
-        academicCertificates: [String], // URLs to uploaded documents
-        governmentId: String // URL to uploaded document
+        cv: {
+            filename: String,
+            path: String,
+            mimetype: String
+        },
+        academicCertificates: [{
+            filename: String,
+            path: String,
+            mimetype: String
+        }],
+        governmentId: {
+            filename: String,
+            path: String,
+            mimetype: String
+        }
     },
     professionalReferences: [{
         name: String,
@@ -53,6 +72,27 @@ const tutorApplicationSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     }
+});
+
+// Clean up files when application is deleted
+tutorApplicationSchema.pre('remove', async function(next) {
+    const { deleteFile } = require('../utils/fileUpload.util');
+    
+    if (this.documents.cv) {
+        await deleteFile(this.documents.cv.path);
+    }
+    
+    if (this.documents.academicCertificates) {
+        for (const cert of this.documents.academicCertificates) {
+            await deleteFile(cert.path);
+        }
+    }
+    
+    if (this.documents.governmentId) {
+        await deleteFile(this.documents.governmentId.path);
+    }
+    
+    next();
 });
 
 const TutorApplication = mongoose.model('TutorApplication', tutorApplicationSchema);

@@ -12,4 +12,11 @@ router.get('/tutor', authorizeRoles(ROLES.TUTOR), dashboardController.getTutorDa
 router.get('/parent', authorizeRoles(ROLES.PARENT), dashboardController.getParentDashboard);
 router.get('/admin', authorizeRoles(ROLES.ADMIN), dashboardController.getAdminDashboard);
 
+// router.get('/student/courses', authorizeRoles(ROLES.STUDENT), dashboardController.getStudentCourses);
+// router.get('/student/materials/:courseId', authorizeRoles(ROLES.STUDENT), dashboardController.getCourseMaterials);
+// router.get('/tutor/student-performance/:studentId', authorizeRoles(ROLES.TUTOR), dashboardController.getStudentPerformance);
+// router.get('/admin/system-overview', authorizeRoles(ROLES.ADMIN), dashboardController.getSystemOverview);
+// router.get('/parent/child-performance/:childId', authorizeRoles(ROLES.PARENT), dashboardController.getChildPerformance);
+
+
 module.exports = router;

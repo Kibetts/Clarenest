@@ -82,13 +82,13 @@ const checkOverdueFees = async () => {
 // Schedule the task to run every day at midnight
 const scheduleOverdueFeeCheck = () => {
     cron.schedule('0 0 * * *', checkOverdueFees);
-    console.log('Scheduled overduecheck');
+    // console.log('Scheduled overduecheck');
 };
 
 // Run the check immediately when the server starts
 const runOverdueFeeCheckImmediately = () => {
     checkOverdueFees();
-    console.log('Ran overduecheck immediately');
+    // console.log('Ran overduecheck immediately');
 };
 
 module.exports = {

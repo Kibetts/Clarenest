@@ -18,7 +18,8 @@ const studentSchema = new mongoose.Schema({
     }],
     parent: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Parent'
+        ref: 'Parent',
+        default: null
     },
     attendanceRecord: [{
         date: Date,

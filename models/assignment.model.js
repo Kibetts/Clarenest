@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const fs = require('fs').promises;
+const path = require('path');
 
 const assignmentSchema = new mongoose.Schema({
     title: {
@@ -31,6 +33,11 @@ const assignmentSchema = new mongoose.Schema({
         required: [true, 'Total points for the assignment are required'],
         min: [0, 'Total points cannot be negative']
     },
+    attachments: {
+        filename: String,
+        path: String,
+        mimetype: String
+    },
     submissions: [{
         student: {
             type: mongoose.Schema.Types.ObjectId,
@@ -40,10 +47,7 @@ const assignmentSchema = new mongoose.Schema({
             type: Date,
             default: Date.now
         },
-        content: {
-            type: String,
-            required: true
-        },
+        content: String,
         files: [{
             filename: String,
             path: String,
@@ -58,6 +62,31 @@ const assignmentSchema = new mongoose.Schema({
     }]
 }, {
     timestamps: true
+});
+
+// Middleware to delete files when assignment is deleted
+assignmentSchema.pre('remove', async function(next) {
+    try {
+        // Delete assignment attachment if exists
+        if (this.attachments && this.attachments.path) {
+            await fs.unlink(path.join(__dirname, '..', this.attachments.path));
+        }
+
+        // Delete all submission files
+        for (const submission of this.submissions) {
+            if (submission.files && submission.files.length > 0) {
+                for (const file of submission.files) {
+                    if (file.path) {
+                        await fs.unlink(path.join(__dirname, '..', file.path));
+                    }
+                }
+            }
+        }
+        next();
+    } catch (error) {
+        console.error('Error deleting assignment files:', error);
+        next(error);
+    }
 });
 
 const Assignment = mongoose.model('Assignment', assignmentSchema);
