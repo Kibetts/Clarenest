@@ -19,138 +19,228 @@ const AppError = require('../utils/appError');
 
 exports.getStudentDashboard = async (req, res, next) => {
     try {
-        const student = await Student.findById(req.user._id)
-            .populate('grade subjects');
+        // First attempt to find the student by querying the User model with proper discrimination
+        let student = await User.findOne({ _id: req.user._id, role: 'student' });
+        
+        if (!student) {
+            // If not found, update the existing User document to include student fields
+            student = await User.findByIdAndUpdate(
+                req.user._id,
+                {
+                    $set: {
+                        role: 'student',
+                        grade: req.user.grade,
+                        subjects: [],
+                        status: "offline",
+                        lastActive: new Date(),
+                        enrollmentDate: req.user.createdAt,
+                        feeStatus: req.user.feeStatus,
+                        totalFees: req.user.totalFees,
+                        paidFees: req.user.paidFees,
+                        __t: 'Student'  // This is important for discriminators
+                    }
+                },
+                {
+                    new: true,
+                    runValidators: false
+                }
+            );
+        }
 
         if (!student) {
             return next(new AppError('Student not found', 404));
         }
 
-        // Upcoming classes/lessons
-        const upcomingLessons = await Lesson.find({
-            students: student._id,
-            startTime: { $gte: new Date() }
-        })
-        .populate('subject tutor')
-        .sort('startTime')
-        .limit(5);
+        // Get current date for queries
+        const now = new Date();
 
-        const upcomingAssessments = await Assessment.find({
-            subject: { $in: student.subjects.map(sub => sub._id) },
-            dueDate: { $gte: new Date() }
-        }).populate('subject');
+        // Default empty arrays for error handling
+        let dashboardData = {
+            upcomingLessons: [],
+            activeAssignments: [],
+            upcomingAssessments: [],
+            recentGrades: [],
+            attendanceRecords: [],
+            courseMaterials: [],
+            unreadMessages: 0,
+            announcements: [],
+            schedule: []
+        };
 
-        // Active assignments
-        const activeAssignments = await Assignment.find({
-            'submissions.student': { $ne: student._id },
-            dueDate: { $gte: new Date() }
-        })
-        .populate('subject')
-        .sort('dueDate');
+        try {
+            // Fetch all dashboard data in parallel using Promise.all
+            const [
+                upcomingLessons,
+                activeAssignments,
+                upcomingAssessments,
+                recentGrades,
+                attendanceRecords,
+                courseMaterials,
+                unreadMessages,
+                announcements,
+                weekSchedule
+            ] = await Promise.all([
+                Lesson.find({
+                    students: student._id,
+                    startTime: { $gte: now }
+                })
+                .populate('subject tutor')
+                .sort('startTime')
+                .limit(5)
+                .lean()
+                .catch(() => []),
 
-        // Recent grades
-        const recentGrades = await Result.find({ student: student._id })
-            .populate('subject')
-            .sort('-issuedDate')
-            .limit(5);
+                Assignment.find({
+                    'submissions.student': { $ne: student._id },
+                    dueDate: { $gte: now }
+                })
+                .populate('subject')
+                .sort('dueDate')
+                .lean()
+                .catch(() => []),
+
+                Assessment.find({
+                    subject: { $in: student.subjects || [] },
+                    dueDate: { $gte: now }
+                })
+                .populate('subject')
+                .lean()
+                .catch(() => []),
+
+                Result.find({ student: student._id })
+                .populate('subject')
+                .sort('-issuedDate')
+                .limit(5)
+                .lean()
+                .catch(() => []),
+
+                Attendance.find({
+                    'attendees.student': student._id
+                })
+                .populate({
+                    path: 'lesson',
+                    populate: {
+                        path: 'subject tutor'
+                    }
+                })
+                .sort('-date')
+                .lean()
+                .catch(() => []),
+
+                CourseMaterial.find({
+                    subject: { $in: student.subjects || [] },
+                    gradeLevel: student.grade,
+                    isActive: true
+                })
+                .populate('subject uploadedBy')
+                .sort('-createdAt')
+                .lean()
+                .catch(() => []),
+
+                Message.countDocuments({
+                    recipient: student._id,
+                    read: false
+                }).catch(() => 0),
+
+                Announcement.find({
+                    $or: [
+                        { recipientType: 'all' },
+                        { recipientType: 'students' },
+                        { recipientType: 'specific', recipients: student._id }
+                    ],
+                    expiryDate: { $gte: now }
+                })
+                .sort('-createdAt')
+                .limit(5)
+                .lean()
+                .catch(() => []),
+
+                Lesson.aggregate([
+                    {
+                        $match: {
+                            students: student._id,
+                            startTime: { 
+                                $gte: now,
+                                $lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+                            }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: { $dateToString: { format: "%Y-%m-%d", date: "$startTime" } },
+                            lessons: { $push: "$$ROOT" }
+                        }
+                    },
+                    { $sort: { "_id": 1 } },
+                    { $limit: 7 }
+                ]).catch(() => [])
+            ]);
+
+            // Update dashboardData with fetched data
+            dashboardData = {
+                upcomingLessons,
+                activeAssignments,
+                upcomingAssessments,
+                recentGrades,
+                attendanceRecords,
+                courseMaterials,
+                unreadMessages,
+                announcements,
+                schedule: weekSchedule
+            };
+        } catch (error) {
+            console.error('Error fetching dashboard data:', error);
+            // Continue with default empty values if there's an error
+        }
 
         // Calculate overall grade
-        const allResults = await Result.find({ student: student._id });
+        const allResults = dashboardData.recentGrades || [];
         const overallGrade = allResults.length > 0 
             ? allResults.reduce((sum, result) => sum + result.score, 0) / allResults.length 
             : null;
 
-        // Attendance records
-        const attendance = await Attendance.find({
-            'attendees.student': student._id
-        })
-        .populate('lesson')
-        .sort('-date');
-
         // Calculate attendance percentage
-        const attendancePercentage = attendance.length > 0
-            ? (attendance.filter(a => 
+        const attendancePercentage = dashboardData.attendanceRecords.length > 0
+            ? (dashboardData.attendanceRecords.filter(a => 
                 a.attendees.find(att => 
                     att.student.toString() === student._id.toString() && 
                     att.status === 'Present'
                 )
-            ).length / attendance.length) * 100
+            ).length / dashboardData.attendanceRecords.length) * 100
             : 0;
 
-        // Course materials
-        const courseMaterials = await CourseMaterial.find({
-            subject: { $in: student.subjects },
-            gradeLevel: student.grade,
-            isActive: true
-        })
-        .populate('subject uploadedBy')
-        .sort('-createdAt');
-
-        // Unread messages
-        const unreadMessages = await Message.countDocuments({
-            recipient: student._id,
-            read: false
-        });
-
-        // Recent announcements
-        const announcements = await Announcement.find({
-            $or: [
-                { recipientType: 'all' },
-                { recipientType: 'students' },
-                { recipientType: 'specific', recipients: student._id }
-            ],
-            expiryDate: { $gte: new Date() }
-        })
-        .sort('-createdAt')
-        .limit(5);
-
-        // Schedule
-        const schedule = await Lesson.aggregate([
-            {
-                $match: {
-                    students: student._id,
-                    startTime: { $gte: new Date() }
-                }
-            },
-            {
-                $group: {
-                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$startTime" } },
-                    lessons: { $push: "$$ROOT" }
-                }
-            },
-            { $sort: { "_id": 1 } },
-            { $limit: 7 }
-        ]);
-
+        // Prepare and send response
         res.status(200).json({
             status: 'success',
             data: {
                 student: {
+                    id: student._id,
                     name: student.name,
+                    email: student.email,
                     grade: student.grade,
-                    subjects: student.subjects
+                    subjects: student.subjects || [],
+                    status: student.status,
+                    feeStatus: student.feeStatus,
+                    enrollmentDate: student.enrollmentDate,
+                    lastActive: student.lastActive
                 },
                 dashboard: {
-                    upcomingLessons,
-                    activeAssignments,
-                    upcomingAssessments,
-                    recentGrades,
+                    ...dashboardData,
                     overallGrade,
                     attendance: {
-                        records: attendance,
+                        records: dashboardData.attendanceRecords,
                         percentage: attendancePercentage
-                    },
-                    courseMaterials,
-                    unreadMessages,
-                    announcements,
-                    schedule
+                    }
                 }
             }
         });
+
     } catch (err) {
-        next(new AppError('Error fetching student dashboard', 500));
+        console.error('Student Dashboard Error:', err);
+        next(new AppError('Error fetching student dashboard: ' + (err.message || 'Unknown error'), 500));
     }
 };
+
 
 exports.getTutorDashboard = async (req, res, next) => {
     try {

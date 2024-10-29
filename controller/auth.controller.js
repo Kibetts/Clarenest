@@ -16,7 +16,7 @@ const signToken = (id) => {
 
 exports.register = async (req, res, next) => {
     try {
-        const { name, email, password, role } = req.body;
+        const { name, email, password, role, ...additionalData } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -25,70 +25,173 @@ exports.register = async (req, res, next) => {
         }
 
         let newUser;
-        
-        if (role === 'admin') {
-            // Create admin-specific data
-            newUser = await Admin.create({
-                name,
-                email,
-                password,
-                role,
-                department: 'Academic Affairs', // Default department
-                adminLevel: 'Junior', // Default level
-                permissions: ['manage_users', 'manage_courses'], // Default permissions
-                status: 'active',
-                isEmailVerified: true // For admin we can set this to true by default
-            });
-        } else {
-            // Handle other roles...
-            newUser = await User.create({
-                name,
-                email,
-                password,
-                role,
-                status: 'pending',
-                isEmailVerified: false
-            });
+
+        // Handle user creation based on role
+        switch (role) {
+            case 'admin':
+                newUser = await Admin.create({
+                    name,
+                    email,
+                    password,
+                    role,
+                    department: additionalData.department || 'Academic Affairs',
+                    adminLevel: additionalData.adminLevel || 'Junior',
+                    permissions: additionalData.permissions || ['manage_users', 'manage_courses'],
+                    status: 'active',
+                    isEmailVerified: true // Admins are verified by default
+                });
+                break;
+
+            case 'tutor':
+                newUser = await Tutor.create({
+                    name,
+                    email,
+                    password,
+                    role,
+                    subjects: additionalData.subjects || [],
+                    qualifications: additionalData.qualifications || [],
+                    yearsOfExperience: additionalData.yearsOfExperience || 0,
+                    preferredGradeLevels: additionalData.preferredGradeLevels || [],
+                    availability: additionalData.availability || [],
+                    status: 'pending',
+                    isEmailVerified: false
+                });
+
+                // Create tutor application
+                if (additionalData.application) {
+                    await TutorApplication.create({
+                        user: newUser._id,
+                        ...additionalData.application,
+                        status: 'pending'
+                    });
+                }
+                break;
+
+            case 'student':
+                newUser = await Student.create({
+                    name,
+                    email,
+                    password,
+                    role,
+                    grade: additionalData.grade,
+                    subjects: additionalData.subjects || [],
+                    parent: additionalData.parentId || null,
+                    status: 'pending',
+                    isEmailVerified: false,
+                    enrollmentDate: new Date()
+                });
+
+                // Create student application
+                if (additionalData.application) {
+                    await StudentApplication.create({
+                        user: newUser._id,
+                        ...additionalData.application,
+                        status: 'pending'
+                    });
+                }
+                break;
+
+            case 'parent':
+                newUser = await Parent.create({
+                    name,
+                    email,
+                    password,
+                    role,
+                    children: additionalData.children || [],
+                    relationship: additionalData.relationship,
+                    emergencyContact: additionalData.emergencyContact,
+                    status: 'pending',
+                    isEmailVerified: false
+                });
+
+                // Update children's parent reference if provided
+                if (additionalData.children && additionalData.children.length > 0) {
+                    await Student.updateMany(
+                        { _id: { $in: additionalData.children } },
+                        { $set: { parent: newUser._id } }
+                    );
+                }
+                break;
+
+            default:
+                return next(new AppError('Invalid user role', 400));
         }
 
-
-        // Generate verification token
-        const verificationToken = crypto.randomBytes(32).toString('hex');
-        newUser.verificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-        newUser.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-        await newUser.save({ validateBeforeSave: false });
-
-        // Send verification email
-        const verificationURL = `${req.protocol}://${req.get('host')}/api/verify-email/${verificationToken}`;
-        const message = `Please verify your email by clicking on the following link: ${verificationURL}`;
-
-        try {
-            await sendEmail({
-                email: newUser.email,
-                subject: 'Email Verification',
-                message
-            });
-        } catch (emailError) {
-            console.error('Error sending verification email:', emailError);
-            newUser.verificationToken = undefined;
-            newUser.verificationTokenExpires = undefined;
+        // Generate verification token (except for admin)
+        if (role !== 'admin') {
+            const verificationToken = crypto.randomBytes(32).toString('hex');
+            newUser.verificationToken = crypto
+                .createHash('sha256')
+                .update(verificationToken)
+                .digest('hex');
+            newUser.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
             await newUser.save({ validateBeforeSave: false });
-            return next(new AppError('There was an error sending the email. Try again later!', 500));
+
+            // Send verification email
+            const verificationURL = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
+            const message = `Please verify your email by clicking on the following link: ${verificationURL}`;
+
+            try {
+                await sendEmail({
+                    email: newUser.email,
+                    subject: 'Email Verification',
+                    message,
+                    html: `
+                        <h1>Welcome to Clarenest International School</h1>
+                        <p>Thank you for registering with us. Please verify your email to continue.</p>
+                        <p>Click the link below to verify your email:</p>
+                        <a href="${verificationURL}" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
+                            Verify Email
+                        </a>
+                        <p>If the button doesn't work, copy and paste this link in your browser:</p>
+                        <p>${verificationURL}</p>
+                        <p>This link will expire in 24 hours.</p>
+                    `
+                });
+            } catch (emailError) {
+                console.error('Error sending verification email:', emailError);
+                newUser.verificationToken = undefined;
+                newUser.verificationTokenExpires = undefined;
+                await newUser.save({ validateBeforeSave: false });
+                return next(new AppError('There was an error sending the email. Try again later!', 500));
+            }
         }
 
-        // Create application based on role
-        if (role === 'tutor') {
-            await TutorApplication.create({ user: newUser._id, ...req.body.application });
-        } else if (role === 'student') {
-            await StudentApplication.create({ user: newUser._id, ...req.body.application });
+        // Send role-specific welcome emails
+        let welcomeMessage;
+        switch (role) {
+            case 'tutor':
+                welcomeMessage = 'Welcome to our teaching team! Your application is being reviewed.';
+                break;
+            case 'student':
+                welcomeMessage = 'Welcome to Clarenest! We\'re excited to have you join our learning community.';
+                break;
+            case 'parent':
+                welcomeMessage = 'Welcome to Clarenest! Stay connected with your child\'s education journey.';
+                break;
+            default:
+                welcomeMessage = 'Welcome to Clarenest International School!';
         }
 
+        // Return success response
         res.status(201).json({
             status: 'success',
-            message: 'User registered successfully. Please check your email to verify your account.'
+            message: role === 'admin' 
+                ? 'Admin account created successfully' 
+                : 'Registration successful. Please check your email to verify your account.',
+            data: {
+                user: {
+                    id: newUser._id,
+                    name: newUser.name,
+                    email: newUser.email,
+                    role: newUser.role
+                }
+            }
         });
+
     } catch (err) {
-        next(err);
+        console.error('Registration error:', err);
+        next(new AppError(err.message || 'Error during registration', 500));
     }
 };
 

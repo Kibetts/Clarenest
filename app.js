@@ -97,6 +97,7 @@ app.get('/favicon.ico', (req, res) => res.status(204));
 
 scheduledTasks.scheduleOverdueFeeCheck();
 
+
 // Routes
 app.get('/', (req, res) => {
     res.status(200).json({
@@ -104,7 +105,7 @@ app.get('/', (req, res) => {
     })
 });
 
-app.use('/api', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/lessons', lessonRoutes);
 app.use('/api/subjects', subjectRoutes);

@@ -7,10 +7,10 @@ const studentSchema = new mongoose.Schema({
         default: Date.now
     },
     grade: {
-        type: Number,
+        type: String,
         required: [true, 'Grade level is required'],
-        min: 1,
-        max: 12
+        enum: ['1st', '2nd', '3rd', '4th', '5th', '6th', 
+               '7th', '8th', '9th', '10th', '11th', '12th']
     },
     subjects: [{
         type: mongoose.Schema.Types.ObjectId,
@@ -31,32 +31,39 @@ const studentSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: ["online", "offline"],
-        default: "offline",
+        default: "offline"
     },
     lastActive: {
         type: Date,
-        default: Date.now,
-    },
-}, { timestamps: true });
+        default: Date.now
+    }
+}, {
+    discriminatorKey: 'role',
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+});
 
+// Virtual for assessment submissions
 studentSchema.virtual('assessmentSubmissions', {
     ref: 'AssessmentSubmission',
     localField: '_id',
     foreignField: 'student'
 });
 
+// Instance method for updating status
+studentSchema.methods.updateStatus = function(status) {
+    this.status = status;
+    this.lastActive = new Date();
+}; 
 
+// Pre-save middleware
 studentSchema.pre('save', function(next) {
     if (this.isNew) {
         this.role = 'student';
     }
     next();
 });
-
-studentSchema.methods.updateStatus = function(status) {
-    this.status = status;
-    this.lastActive = new Date();
-};
 
 const Student = User.discriminator('Student', studentSchema);
 module.exports = Student;

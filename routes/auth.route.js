@@ -4,7 +4,10 @@ const applicationController = require('../controller/application.controller');
 // const { authenticateJWT } = require('../middleware/auth.middleware');
 const parentController = require('../controller/parent.controller')
 
+
+
 const router = express.Router();
+
 
 router.post('/register', authController.register);
 router.post('/login', authController.login);

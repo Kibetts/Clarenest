@@ -100,10 +100,16 @@ exports.approveStudentApplication = async (req, res, next) => {
 
 exports.createStudentAccount = async (req, res, next) => {
     try {
+        console.log('Creating student account with token:', req.params.token); // Debug log
+
         const application = await StudentApplication.findOne({
-            accountCreationToken: req.params.token,
+            accountCreationToken: crypto.createHash('sha256')
+                .update(req.params.token)
+                .digest('hex'),
             accountCreationTokenExpires: { $gt: Date.now() }
         });
+
+        console.log('Found application:', application ? 'Yes' : 'No'); // Debug log
 
         if (!application) {
             return next(new AppError('Invalid or expired token', 400));
@@ -471,30 +477,3 @@ exports.rejectApplication = async (req, res, next) => {
     }
 };
 
-//Remove this method
-// exports.verifyEmail = async (req, res, next) => {
-//     try {
-//         const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
-
-//         const user = await User.findOne({
-//             verificationToken: hashedToken,
-//             verificationTokenExpires: { $gt: Date.now() }
-//         });
-
-//         if (!user) {
-//             return next(new AppError('Token is invalid or has expired', 400));
-//         }
-
-//         user.isEmailVerified = true;
-//         user.verificationToken = undefined;
-//         user.verificationTokenExpires = undefined;
-//         await user.save({ validateBeforeSave: false });
-
-//         res.status(200).json({
-//             status: 'success',
-//             message: 'Email verified successfully. You can now log in.'
-//         });
-//     } catch (err) {
-//         next(new AppError('Error verifying email', 500));
-//     }
-// };

@@ -1,4 +1,5 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
+
 const studentApplicationSchema = new mongoose.Schema({
     personalInfo: {
         fullName: {
@@ -56,3 +57,6 @@ const studentApplicationSchema = new mongoose.Schema({
     accountCreationToken: String,
     accountCreationTokenExpires: Date
 }, { timestamps: true });
+
+const StudentApplication = mongoose.model('StudentApplication', studentApplicationSchema);
+module.exports = StudentApplication;
