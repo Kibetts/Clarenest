@@ -19,12 +19,11 @@ const AppError = require('../utils/appError');
 
 exports.getStudentDashboard = async (req, res, next) => {
     try {
-        // First attempt to find the student by querying the User model with proper discrimination
-        let student = await User.findOne({ _id: req.user._id, role: 'student' });
+        let student = await Student.findById(req.user._id);
         
         if (!student) {
             // If not found, update the existing User document to include student fields
-            student = await User.findByIdAndUpdate(
+            student = await Student.findByIdAndUpdate(
                 req.user._id,
                 {
                     $set: {
@@ -36,8 +35,7 @@ exports.getStudentDashboard = async (req, res, next) => {
                         enrollmentDate: req.user.createdAt,
                         feeStatus: req.user.feeStatus,
                         totalFees: req.user.totalFees,
-                        paidFees: req.user.paidFees,
-                        __t: 'Student'  // This is important for discriminators
+                        paidFees: req.user.paidFees
                     }
                 },
                 {
