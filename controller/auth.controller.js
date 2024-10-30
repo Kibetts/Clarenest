@@ -14,6 +14,83 @@ const signToken = (id) => {
     });
 };
 
+
+exports.registerAdmin = async (req, res, next) => {
+    try {
+        // Check if request includes secret admin key
+        const { adminSecretKey } = req.body;
+        
+        if (!process.env.ADMIN_SECRET_KEY || adminSecretKey !== process.env.ADMIN_SECRET_KEY) {
+            return next(new AppError('Unauthorized admin registration attempt', 401));
+        }
+
+        const { name, email, password, department, adminLevel } = req.body;
+
+        // Check if user already exists (using your existing User model)
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return next(new AppError('Email already in use', 400));
+        }
+
+        // Create admin user using your Admin model with correct schema fields
+        const newAdmin = await Admin.create({
+            name,
+            email,
+            password,
+            role: 'admin',
+            department: department || 'Academic Affairs',
+            adminLevel: adminLevel || 'Junior',
+            permissions: ['manage_users', 'manage_courses', 'manage_admissions'],
+            status: 'active',
+            isEmailVerified: true // Admins are verified by default
+        });
+
+        // Use your existing signToken function from auth.controller
+        const token = jwt.sign({ id: newAdmin._id }, process.env.JWT_SECRET, {
+            expiresIn: process.env.JWT_EXPIRES_IN
+        });
+
+        // Send welcome email using your existing email utility
+        try {
+            await sendEmail({
+                email: newAdmin.email,
+                subject: 'Admin Account Created',
+                message: 'Welcome to Clarenest International School Admin Panel',
+                html: `
+                    <h1>Welcome to Clarenest International School</h1>
+                    <p>Your admin account has been created successfully.</p>
+                    <p>You can now log in to the admin panel.</p>
+                `
+            });
+        } catch (emailError) {
+            console.error('Error sending welcome email:', emailError);
+            // Continue even if email fails
+        }
+
+        // Send response following your existing pattern
+        res.status(201).json({
+            status: 'success',
+            message: 'Admin account created successfully',
+            data: {
+                user: {
+                    id: newAdmin._id,
+                    name: newAdmin.name,
+                    email: newAdmin.email,
+                    role: newAdmin.role,
+                    department: newAdmin.department,
+                    adminLevel: newAdmin.adminLevel
+                },
+                token
+            }
+        });
+
+    } catch (err) {
+        console.error('Admin registration error:', err);
+        return next(new AppError(err.message || 'Error during admin registration', 500));
+    }
+};
+
+
 exports.register = async (req, res, next) => {
     try {
         const { name, email, password, role, ...additionalData } = req.body;
