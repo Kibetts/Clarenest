@@ -44,7 +44,27 @@ const assessmentSchema = new mongoose.Schema({
     isActive: {
         type: Boolean,
         default: true
-    }
+    },
+    assessmentFile: {
+        filename: String,
+        path: String,
+        mimetype: String
+    },
+    distributedTo: [{
+        parent: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Parent'
+        },
+        distributedAt: {
+            type: Date,
+            default: Date.now
+        },
+        downloaded: {
+            type: Boolean,
+            default: false
+        },
+        downloadedAt: Date
+    }]
 }, { timestamps: true });
 
 assessmentSchema.virtual('submissions', {

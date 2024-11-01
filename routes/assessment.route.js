@@ -7,6 +7,12 @@ const router = express.Router();
 
 router.use(authenticateJWT);
 
+router.post(
+    '/distribute',authorizeRoles(ROLES.TUTOR),assessmentController.distributeToParents);
+
+router.get(
+    '/:assessmentId/download',authorizeRoles(ROLES.PARENT),assessmentController.downloadAssessment);
+
 router
     .route('/')
     .post(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), assessmentController.createAssessment)

@@ -681,6 +681,20 @@ exports.getParentDashboard = async (req, res, next) => {
         .sort('-createdAt')
         .limit(5);
 
+        // Add distributed assessments to dashboard data
+        const distributedAssessments = await Assessment.find({
+            'distributedTo.parent': parent._id
+        }).populate('subject creator');
+
+        // Format assessment data for dashboard
+        const pendingAssessments = distributedAssessments.filter(assessment => {
+            const distribution = assessment.distributedTo.find(dist => 
+                dist.parent.equals(parent._id)
+            );
+            return !distribution.downloaded;
+        });
+
+        // Add to dashboard response
         res.status(200).json({
             status: 'success',
             data: {
@@ -691,9 +705,19 @@ exports.getParentDashboard = async (req, res, next) => {
                 childrenDetails,
                 financialInfo,
                 unreadMessages,
-                parentAnnouncements
+                parentAnnouncements,
+                pendingAssessments: pendingAssessments.map(assessment => ({
+                    id: assessment._id,
+                    title: assessment.title,
+                    subject: assessment.subject.name,
+                    distributedAt: assessment.distributedTo.find(dist => 
+                        dist.parent.equals(parent._id)
+                    ).distributedAt,
+                    tutor: assessment.creator.name
+                }))
             }
         });
+
     } catch (err) {
         next(new AppError('Error fetching parent dashboard', 500));
     }

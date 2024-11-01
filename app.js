@@ -152,6 +152,8 @@ app.use('*', (req, res, next) => {
     next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
 });
 
+mongoose.set('strictQuery', false);
+
 // MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
