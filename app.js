@@ -155,11 +155,39 @@ app.use('*', (req, res, next) => {
 mongoose.set('strictQuery', false);
 
 // MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-}).then(() => console.log('Connected to MongoDB'))
-  .catch((err) => console.error('Could not connect to MongoDB...', err));
+mongoose.set('strictQuery', false); // Add this line to handle deprecation warning
+
+const connectDB = async () => {
+    try {
+        const conn = await mongoose.connect(process.env.MONGODB_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+            socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+        });
+        
+        console.log(`MongoDB Connected: ${conn.connection.host}`);
+        
+        // Handle connection events
+        mongoose.connection.on('error', err => {
+            console.error('MongoDB connection error:', err);
+        });
+
+        mongoose.connection.on('disconnected', () => {
+            console.log('MongoDB disconnected');
+        });
+
+        mongoose.connection.on('reconnected', () => {
+            console.log('MongoDB reconnected');
+        });
+
+    } catch (error) {
+        console.error('Error connecting to MongoDB:', error);
+        process.exit(1);
+    }
+};
+
+connectDB();
 
 // Server
 const port = process.env.PORT || 3000;

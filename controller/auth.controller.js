@@ -7,6 +7,8 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const sendEmail = require('../utils/email.util');
 const AppError = require('../utils/appError');
+const { retry } = require('../utils/database.util');
+
 
 const signToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -34,7 +36,7 @@ exports.registerAdmin = async (req, res, next) => {
 
         const existingUser = await User.findOne({ email });
         if (existingUser) {
-            return next(new AppError('Email already in use', 400));
+            return next(new AppError('Email already in use', 400)).maxTimeMS(5000);;
         }
 
         const newAdmin = await Admin.create({
@@ -81,8 +83,14 @@ exports.register = async (req, res, next) => {
     try {
         const { name, email, password, role, ...additionalData } = req.body;
 
+        if (mongoose.connection.readyState !== 1) {
+            return next(new AppError('Database connection not ready', 500));
+        }
+
         // Check if user already exists
-        const existingUser = await User.findOne({ email });
+        const existingUser = await retry(() => 
+            User.findOne({ email }).maxTimeMS(5000)
+        );        
         if (existingUser) {
             return next(new AppError('Email already in use', 400));
         }
@@ -92,6 +100,10 @@ exports.register = async (req, res, next) => {
         // Handle user creation based on role
         switch (role) {
             case 'admin':
+                 // Verify admin secret key
+                 if (additionalData.adminSecretKey !== process.env.ADMIN_SECRET_KEY) {
+                    return next(new AppError('Invalid admin secret key', 403));
+                }
                 newUser = await Admin.create({
                     name,
                     email,
@@ -252,11 +264,22 @@ exports.register = async (req, res, next) => {
             }
         });
 
-    } catch (err) {
+    }catch (err) {
         console.error('Registration error:', err);
+        
+        // Enhanced error handling
+        if (err.name === 'MongoTimeoutError') {
+            return next(new AppError('Database operation timed out. Please try again.', 500));
+        }
+        
+        if (err.name === 'MongoNetworkError') {
+            return next(new AppError('Database connection error. Please try again.', 500));
+        }
+        
         next(new AppError(err.message || 'Error during registration', 500));
     }
 };
+
 
 exports.verifyEmail = async (req, res, next) => {
     try {
