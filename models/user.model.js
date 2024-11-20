@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto'); 
 
 const userSchema = new mongoose.Schema({
     name: {
@@ -40,23 +41,38 @@ const userSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'verified', 'active'],
-        default: 'pending'
+        enum: ['pending', 'offline', 'online', 'active', 'suspended', 'inactive'],
+        default: 'offline'
     },
     isFirstLogin: {
         type: Boolean,
         default: true
     },
-    verificationToken: String,
-    verificationTokenExpires: Date,
-    resetPasswordToken: String,
-    resetPasswordExpire: Date,
-    feesPaid: {
+    // Email verification fields
+    isEmailVerified: {
         type: Boolean,
-        default: false
+        default: true
     },
-
-feeStatus: {
+    // Account creation fields
+    accountCreationToken: {
+        type: String,
+        select: false
+    },
+    accountCreationTokenExpires: {
+        type: Date,
+        select: false
+    },
+    // Password reset fields
+    resetPasswordToken: {
+        type: String,
+        select: false
+    },
+    resetPasswordExpire: {
+        type: Date,
+        select: false
+    },
+    // Fee related fields
+    feeStatus: {
         type: String,
         enum: ['unpaid', 'partial', 'paid'],
         default: 'unpaid'
@@ -69,6 +85,7 @@ feeStatus: {
         type: Number,
         default: 0
     },
+    nextPaymentDue: Date,
     temporaryAccess: {
         granted: {
             type: Boolean,
@@ -76,16 +93,7 @@ feeStatus: {
         },
         expiresAt: Date
     },
-    isEmailVerified: {
-        type: Boolean,
-        default: false
-    },
-    verificationToken: String,
-    verificationTokenExpires: Date,
-    accountCreationToken: String,
-    accountCreationTokenExpires: Date,
-    nextPaymentDue: Date,
-    
+    // Role specific fields
     grade: {
         type: String,
         enum: ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'],
@@ -95,45 +103,88 @@ feeStatus: {
         type: String,
         required: function() { return this.role === 'tutor'; }
     }],
-    
-}, { timestamps: true });
+    lastActive: {
+        type: Date,
+        default: Date.now
+    }
+}, { 
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+}, { discriminatorKey: 'role' });
 
-// userSchema.methods.correctPassword = async function(candidatePassword, userPassword) {
-//     return await bcrypt.compare(candidatePassword, userPassword);
-// };
-
+// Improved password comparison method
 userSchema.methods.correctPassword = async function(candidatePassword, userPassword) {
-    console.log('Comparing passwords:', { candidatePassword, userPassword });
-    const isMatch = await bcrypt.compare(candidatePassword, userPassword);
-    console.log('Password match:', isMatch);
-    return isMatch;
+    try {
+        const isMatch = await bcrypt.compare(candidatePassword, userPassword);
+        return isMatch;
+    } catch (error) {
+        console.error('Password comparison error:', error);
+        return false;
+    }
 };
 
+// Enhanced verification token creation
 userSchema.methods.createVerificationToken = function() {
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    this.verificationToken = crypto.createHash('sha256')
-        .update(verificationToken)
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    this.verificationToken = crypto
+        .createHash('sha256')
+        .update(rawToken)
         .digest('hex');
     this.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-    return verificationToken;
+    return rawToken; // Return raw token for email
 };
 
+// Enhanced email verification method
 userSchema.methods.verifyEmail = function() {
     this.isEmailVerified = true;
+    this.status = 'active';
     this.verificationToken = undefined;
     this.verificationTokenExpires = undefined;
-    this.status = 'active';
 };
 
+// Create password reset token
+userSchema.methods.createPasswordResetToken = function() {
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    this.resetPasswordToken = crypto
+        .createHash('sha256')
+        .update(resetToken)
+        .digest('hex');
+    this.resetPasswordExpire = Date.now() + 60 * 60 * 1000; // 1 hour
+    return resetToken;
+};
+
+// Update last active timestamp
+userSchema.methods.updateLastActive = function() {
+    this.lastActive = Date.now();
+    return this.save({ validateBeforeSave: false });
+};
+
+// Password hashing middleware
 userSchema.pre('save', async function(next) {
     if (!this.isModified('password')) return next();
-    this.password = await bcrypt.hash(this.password, 12);
-    next();
+    
+    try {
+        this.password = await bcrypt.hash(this.password, 12);
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
 
-
+// Clean up expired tokens middleware
+userSchema.pre('save', function(next) {
+    if (this.verificationTokenExpires && this.verificationTokenExpires < Date.now()) {
+        this.verificationToken = undefined;
+        this.verificationTokenExpires = undefined;
+    }
+    if (this.resetPasswordExpire && this.resetPasswordExpire < Date.now()) {
+        this.resetPasswordToken = undefined;
+        this.resetPasswordExpire = undefined;
+    }
+    next();
+});
 
 const User = mongoose.model('User', userSchema);
 
 module.exports = User;
-

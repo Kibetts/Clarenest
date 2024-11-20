@@ -1,16 +1,37 @@
 const fs = require('fs');
 const { promisify } = require('util');
+const jwt = require('jsonwebtoken');
+const Student = require('../models/student.model');
+const Tutor = require('../models/tutor.model');
 const StudentApplication = require('../models/studentApplication.model');
 const TutorApplication = require('../models/tutorApplication.model');
 const User = require('../models/user.model');
+const Parent = require('../models/parent.model');
 const crypto = require('crypto');
 const sendEmail = require('../utils/email.util');
 const AppError = require('../utils/appError');
 const { uploadFile } = require('../utils/fileUpload.util');
 const { validateStudentApplication, validateTutorApplication, validateTutorFiles } = require('../validators/applicationValidators');
 
+// Helper function for token creation
+const createToken = () => {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto
+        .createHash('sha256')
+        .update(rawToken)
+        .digest('hex');
+    return { rawToken, hashedToken };
+};
 
-// Student Application Functions
+// Helper function for signing JWT
+const signToken = (id) => {
+    return jwt.sign(
+        { id },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN }
+    );
+};
+
 exports.submitStudentApplication = async (req, res, next) => {
     try {
         // Validate the data
@@ -19,29 +40,56 @@ exports.submitStudentApplication = async (req, res, next) => {
             return next(new AppError(error.details[0].message, 400));
         }
 
-        // Check if email already exists - Fixed the model reference
+        // Check if an application with this email already exists
         const existingApplication = await StudentApplication.findOne({
             'personalInfo.email': req.body.personalInfo.email,
             status: { $in: ['pending', 'approved'] }
-        }).exec();  // Added .exec()
+        });
 
         if (existingApplication) {
             return next(new AppError('An application with this email already exists', 400));
         }
 
-        // Create the application
+        // Create the application first
         const newApplication = await StudentApplication.create({
             ...req.body,
             status: 'pending'
         });
 
-        // Send confirmation email
-        await sendEmail({
-            email: req.body.personalInfo.email,
-            subject: 'Student Application Received',
-            message: 'Your application has been received and is under review. We will contact you once the review process is complete.'
-        });
+        // Try to send emails, but continue even if they fail
+        try {
+            // Send confirmation email to student
+            await sendEmail({
+                email: req.body.personalInfo.email,
+                subject: 'Student Application Received',
+                html: `
+                    <h1>Application Received</h1>
+                    <p>Dear ${req.body.personalInfo.fullName},</p>
+                    <p>Your application to Clarenest International School has been received and is under review.</p>
+                    <p>We will contact you once the review process is complete.</p>
+                    <p>Thank you for choosing Clarenest International School.</p>
+                `
+            });
 
+            // Try to send parent notification email
+            await sendEmail({
+                email: req.body.parentInfo.email,
+                subject: 'Child\'s Application to Clarenest International School',
+                html: `
+                    <h1>Clarenest International School Application Notice</h1>
+                    <p>Dear ${req.body.parentInfo.name},</p>
+                    <p>This email is to inform you that your child ${req.body.personalInfo.fullName} has submitted an application to Clarenest International School.</p>
+                    <p>Once the application is reviewed and approved, you will receive another email with instructions to create your parent account.</p>
+                    <p>Thank you for choosing Clarenest International School.</p>
+                `
+            });
+        } catch (emailError) {
+            // Log email error but don't fail the request
+            console.error('Email notification failed:', emailError);
+            // Could store this in a failed notifications queue for retry
+        }
+
+        // Always return success if the application was created
         res.status(201).json({
             status: 'success',
             message: 'Application submitted successfully. We will review your application and contact you soon.',
@@ -49,9 +97,10 @@ exports.submitStudentApplication = async (req, res, next) => {
                 applicationId: newApplication._id
             }
         });
+
     } catch (err) {
-        console.error('Application submission error:', err);  // Added error logging
-        next(new AppError('Error submitting application: ' + err.message, 500));
+        console.error('Application submission error:', err);
+        next(new AppError('Error processing application', 500));
     }
 };
 
@@ -66,33 +115,86 @@ exports.approveStudentApplication = async (req, res, next) => {
             return next(new AppError('Application has already been processed', 400));
         }
 
-        // Generate account creation token
-        const accountCreationToken = crypto.randomBytes(32).toString('hex');
-        
-        // Update application status and set token
+        // Generate tokens for both student and parent
+        const studentTokens = createToken();
+        const parentTokens = createToken();
+
+        // Update application status and set student token
         application.status = 'approved';
-        application.accountCreationToken = crypto.createHash('sha256')
-            .update(accountCreationToken)
-            .digest('hex');
-        application.accountCreationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-        
-        await application.save();
+        application.accountCreationToken = studentTokens.hashedToken;
+        application.accountCreationTokenExpires = Date.now() + 24 * 60 * 60 * 1000;
 
-        // Send account creation email
-        const accountCreationURL = `${process.env.FRONTEND_URL}/create-account/student/${accountCreationToken}`;
-        const message = `Congratulations! Your student application has been approved. Please create your account by clicking on the following link: ${accountCreationURL}`;
+        // Store parent token in application
+        application.parentAccountCreationToken = parentTokens.hashedToken;
+        application.parentAccountCreationTokenExpires = Date.now() + 24 * 60 * 60 * 1000;
 
-        await sendEmail({
-            email: application.personalInfo.email,
-            subject: 'Student Application Approved - Create Your Account',
-            message
-        });
+        // Validate email addresses before sending
+        if (!application.personalInfo.email) {
+            return next(new AppError('Student email is missing', 400));
+        }
+
+        if (!application.parentInfo.email) {
+            return next(new AppError('Parent email is missing', 400));
+        }
+
+        try {
+            await application.save();
+
+            // Send student account creation email
+            const studentURL = `${process.env.FRONTEND_URL}/create-account/student/${studentTokens.rawToken}`;
+            await sendEmail({
+                email: application.personalInfo.email,
+                subject: 'Student Application Approved - Create Your Account',
+                html: `
+                    <h1>Application Approved!</h1>
+                    <p>Dear ${application.personalInfo.fullName},</p>
+                    <p>Your application to Clarenest International School has been approved.</p>
+                    <p>Please create your student account by clicking the button below:</p>
+                    <a href="${studentURL}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
+                        Create Student Account
+                    </a>
+                    <p>This link will expire in 24 hours.</p>
+                    <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+                    <p>${studentURL}</p>
+                `
+            });
+
+            // Send parent account creation email
+            const parentURL = `${process.env.FRONTEND_URL}/create-account/parent/${parentTokens.rawToken}`;
+            await sendEmail({
+                email: application.parentInfo.email,
+                subject: 'Create Parent Account - Clarenest International School',
+                html: `
+                    <h1>Welcome to Clarenest International School</h1>
+                    <p>Dear ${application.parentInfo.name},</p>
+                    <p>Your child's application has been approved.</p>
+                    <p>Please create your parent account by clicking the button below:</p>
+                    <a href="${parentURL}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
+                        Create Parent Account
+                    </a>
+                    <p>This link will expire in 24 hours.</p>
+                    <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+                    <p>${parentURL}</p>
+                `
+            });
+
+        } catch (emailError) {
+            console.error('Error sending approval emails:', emailError);
+            application.status = 'pending';
+            application.accountCreationToken = undefined;
+            application.accountCreationTokenExpires = undefined;
+            application.parentAccountCreationToken = undefined;
+            application.parentAccountCreationTokenExpires = undefined;
+            await application.save();
+            return next(new AppError('Error sending approval emails. Please try again.', 500));
+        }
 
         res.status(200).json({
             status: 'success',
-            message: 'Student application approved. An invitation to create an account has been sent to the applicant.'
+            message: 'Application approved. Account creation instructions sent to both student and parent.'
         });
     } catch (err) {
+        console.error('Error in approveStudentApplication:', err);
         next(new AppError('Error approving application: ' + err.message, 500));
     }
 };
@@ -100,63 +202,78 @@ exports.approveStudentApplication = async (req, res, next) => {
 
 exports.createStudentAccount = async (req, res, next) => {
     try {
-        console.log('Creating student account with token:', req.params.token); // Debug log
+        console.log('Creating student account with token:', req.params.token);
+        
+        const hashedToken = crypto
+            .createHash('sha256')
+            .update(req.params.token)
+            .digest('hex');
 
         const application = await StudentApplication.findOne({
-            accountCreationToken: crypto.createHash('sha256')
-                .update(req.params.token)
-                .digest('hex'),
+            accountCreationToken: hashedToken,
             accountCreationTokenExpires: { $gt: Date.now() }
         });
-
-        console.log('Found application:', application ? 'Yes' : 'No'); // Debug log
 
         if (!application) {
             return next(new AppError('Invalid or expired token', 400));
         }
 
-        const newUser = await User.create({
+        // Check for existing user
+        const existingUser = await User.findOne({ 
+            email: application.personalInfo.email 
+        });
+
+        if (existingUser) {
+            return next(new AppError('An account with this email already exists', 400));
+        }
+
+        // Create new student
+        const newStudent = await Student.create({
             name: application.personalInfo.fullName,
             email: application.personalInfo.email,
             password: req.body.password,
             role: 'student',
-            grade: application.educationalInfo.currentGradeLevel
+            grade: application.educationalInfo.currentGradeLevel,
+            subjects: [],
+            status: 'offline',  // Changed from 'active' to 'offline'
+            isEmailVerified: true,
+            enrollmentDate: new Date(),
+            lastActive: new Date()
         });
 
+        // Update application
         application.status = 'account_created';
         application.accountCreationToken = undefined;
         application.accountCreationTokenExpires = undefined;
         await application.save();
 
-        // Generate verification token
-        const verificationToken = crypto.randomBytes(32).toString('hex');
-        newUser.verificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-        newUser.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-        await newUser.save({ validateBeforeSave: false });
-
-        // Send verification email
-        const verificationURL = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
-        const message = `Please verify your email by clicking on the following link: ${verificationURL}`;
-
-        await sendEmail({
-            email: newUser.email,
-            subject: 'Email Verification',
-            message
-        });
+        // Generate token for immediate login
+        const token = jwt.sign(
+            { id: newStudent._id },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN }
+        );
 
         res.status(201).json({
             status: 'success',
-            message: 'Student account created successfully. Please check your email to verify your account.'
+            data: {
+                user: {
+                    id: newStudent._id,
+                    name: newStudent.name,
+                    email: newStudent.email,
+                    role: newStudent.role,
+                    grade: newStudent.grade
+                },
+                token
+            }
         });
     } catch (err) {
-        next(new AppError('Error creating account', 500));
+        console.error('Error creating student account:', err);
+        next(new AppError('Error creating account: ' + err.message, 500));
     }
 };
-
-// Tutor Application Functions
 exports.submitTutorApplication = async (req, res, next) => {
     try {
-        // First validate the files
         if (!req.files || Object.keys(req.files).length === 0) {
             return next(new AppError('No files were uploaded', 400));
         }
@@ -166,7 +283,6 @@ exports.submitTutorApplication = async (req, res, next) => {
             return next(new AppError(filesValidation.error.details[0].message, 400));
         }
 
-        // Parse and validate application data
         let applicationData;
         try {
             applicationData = typeof req.body.application === 'string' 
@@ -181,7 +297,6 @@ exports.submitTutorApplication = async (req, res, next) => {
             return next(new AppError(error.details[0].message, 400));
         }
 
-        // Check if an application with this email already exists
         const existingApplication = await TutorApplication.findOne({
             'personalInfo.email': applicationData.personalInfo.email,
             status: { $in: ['pending', 'approved'] }
@@ -191,7 +306,6 @@ exports.submitTutorApplication = async (req, res, next) => {
             return next(new AppError('An application with this email already exists', 400));
         }
 
-        // Create the application with pending status
         const newApplication = await TutorApplication.create({
             ...applicationData,
             documents: {
@@ -214,11 +328,16 @@ exports.submitTutorApplication = async (req, res, next) => {
             status: 'pending'
         });
 
-        // Send confirmation email
         await sendEmail({
             email: applicationData.personalInfo.email,
             subject: 'Tutor Application Received',
-            message: 'Your application has been received and is under review. We will contact you once the review process is complete.'
+            html: `
+                <h1>Application Received</h1>
+                <p>Dear ${applicationData.personalInfo.fullName},</p>
+                <p>Your tutor application has been received and is under review.</p>
+                <p>We will contact you once the review process is complete.</p>
+                <p>Thank you for your interest in joining Clarenest International School.</p>
+            `
         });
 
         res.status(201).json({
@@ -229,7 +348,6 @@ exports.submitTutorApplication = async (req, res, next) => {
             }
         });
     } catch (err) {
-        // Clean up any uploaded files if there's an error
         if (req.files) {
             Object.values(req.files).flat().forEach(file => {
                 if (fs.existsSync(file.path)) {
@@ -243,88 +361,81 @@ exports.submitTutorApplication = async (req, res, next) => {
 
 exports.approveTutorApplication = async (req, res, next) => {
     try {
-        // Find the application and populate user data if exists
-        const application = await TutorApplication.findById(req.params.id);
-
+        const application = await TutorApplication.findById(req.params.id)
+            
         if (!application) {
             return next(new AppError('Tutor application not found', 404));
         }
-
-        // Debug log to check application structure  TO REMOVE LATER
-        console.log('Application data:', {
-            id: application._id,
-            status: application.status,
-            personalInfo: application.personalInfo
-        });
 
         if (application.status !== 'pending') {
             return next(new AppError('Application has already been processed', 400));
         }
 
-        // More robust email extraction
-        let emailToUse;
-        if (application.personalInfo && application.personalInfo.email) {
-            emailToUse = application.personalInfo.email;
-        } else if (application.email) { // Fallback to direct email property if exists
-            emailToUse = application.email;
-        } else if (application.user && application.user.email) {
-            emailToUse = application.user.email;
-        }
-
-        // Debug log for email extraction
-        console.log('Email extraction:', {
-            fromPersonalInfo: application.personalInfo?.email,
-            directEmail: application.email,
-            fromUser: application.user?.email,
-            finalEmail: emailToUse
-        });
-
-        if (!emailToUse) {
-            console.error('Email not found in application:', application);
-            return next(new AppError('No valid email found for application. Please ensure the application includes an email address.', 400));
-        }
-
-        // Generate account creation token
-        const accountCreationToken = crypto.randomBytes(32).toString('hex');
+        // Generate token
+        const { rawToken, hashedToken } = createToken();
         
-        // Update application status and set token
+        // Update application
         application.status = 'approved';
-        application.accountCreationToken = crypto.createHash('sha256')
-            .update(accountCreationToken)
-            .digest('hex');
-        application.accountCreationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-        
-        await application.save();
+        application.accountCreationToken = hashedToken;
+        application.accountCreationTokenExpires = Date.now() + 24 * 60 * 60 * 1000;
 
-        // Send account creation email
-        const accountCreationURL = `${process.env.FRONTEND_URL}/create-account/tutor/${accountCreationToken}`;
-        const message = `Congratulations! Your tutor application has been approved. Please create your account by clicking on the following link: ${accountCreationURL}`;
+        // Validate email before sending
+        if (!application.personalInfo.email) {
+            return next(new AppError('Tutor email is missing', 400));
+        }
 
-        await sendEmail({
-            email: emailToUse,
-            subject: 'Tutor Application Approved - Create Your Account',
-            message
-        });
+        try {
+            await application.save();
+
+            // Send account creation email
+            const accountCreationURL = `${process.env.FRONTEND_URL}/create-account/tutor/${rawToken}`;
+            await sendEmail({
+                email: application.personalInfo.email,
+                subject: 'Tutor Application Approved - Create Your Account',
+                html: `
+                    <h1>Application Approved!</h1>
+                    <p>Dear ${application.personalInfo.fullName},</p>
+                    <p>Your tutor application has been approved.</p>
+                    <p>Please create your account by clicking the button below:</p>
+                    <a href="${accountCreationURL}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
+                        Create Tutor Account
+                    </a>
+                    <p>This link will expire in 24 hours.</p>
+                    <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+                    <p>${accountCreationURL}</p>
+                `
+            });
+
+        } catch (emailError) {
+            console.error('Error sending approval email:', emailError);
+            application.status = 'pending';
+            application.accountCreationToken = undefined;
+            application.accountCreationTokenExpires = undefined;
+            await application.save();
+            return next(new AppError('Error sending approval email. Please try again.', 500));
+        }
 
         res.status(200).json({
             status: 'success',
             message: 'Tutor application approved. An invitation to create an account has been sent to the applicant.'
         });
     } catch (err) {
-        console.error('Tutor application approval error:', {
-            error: err.message,
-            stack: err.stack,
-            applicationId: req.params.id
-        });
+        console.error('Error in approveTutorApplication:', err);
         next(new AppError(`Error approving application: ${err.message}`, 500));
     }
 };
 
-
 exports.createTutorAccount = async (req, res, next) => {
     try {
+        console.log('Creating tutor account with token:', req.params.token);
+        
+        const hashedToken = crypto
+            .createHash('sha256')
+            .update(req.params.token)
+            .digest('hex');
+
         const application = await TutorApplication.findOne({
-            accountCreationToken: req.params.token,
+            accountCreationToken: hashedToken,
             accountCreationTokenExpires: { $gt: Date.now() }
         });
 
@@ -332,59 +443,88 @@ exports.createTutorAccount = async (req, res, next) => {
             return next(new AppError('Invalid or expired token', 400));
         }
 
-        const newUser = await User.create({
+        // Check for existing user
+        const existingUser = await User.findOne({ 
+            email: application.personalInfo.email 
+        });
+
+        if (existingUser) {
+            return next(new AppError('An account with this email already exists', 400));
+        }
+
+        // Format qualifications properly
+        const formattedQualifications = application.professionalInfo.academicQualifications.map(qual => ({
+            degree: qual,
+            institution: 'Not Specified',
+            year: new Date().getFullYear()
+        }));
+
+        // Create new tutor
+        const newTutor = await Tutor.create({
             name: application.personalInfo.fullName,
             email: application.personalInfo.email,
             password: req.body.password,
             role: 'tutor',
-            subjects: application.professionalInfo.subjectsSpecialization
+            subjects: application.professionalInfo.subjectsSpecialization,
+            qualifications: formattedQualifications,  // Using formatted qualifications
+            yearsOfExperience: application.professionalInfo.teachingExperience || 0,
+            preferredGradeLevels: application.professionalInfo.preferredGradeLevels || [],
+            status: 'offline',  // Changed from 'active' to 'offline'
+            isEmailVerified: true,
+            lastActive: new Date()
         });
 
+        // Update application
         application.status = 'account_created';
         application.accountCreationToken = undefined;
         application.accountCreationTokenExpires = undefined;
         await application.save();
 
-        // Generate verification token
-        const verificationToken = crypto.randomBytes(32).toString('hex');
-        newUser.verificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-        newUser.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-        await newUser.save({ validateBeforeSave: false });
-
-        // Send verification email
-        const verificationURL = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
-        const message = `Please verify your email by clicking on the following link: ${verificationURL}`;
-
-        await sendEmail({
-            email: newUser.email,
-            subject: 'Email Verification',
-            message
-        });
+        // Generate token for immediate login
+        const token = jwt.sign(
+            { id: newTutor._id },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN }
+        );
 
         res.status(201).json({
             status: 'success',
-            message: 'Tutor account created successfully. Please check your email to verify your account.'
+            message: 'Tutor account created successfully',
+            data: {
+                user: {
+                    id: newTutor._id,
+                    name: newTutor.name,
+                    email: newTutor.email,
+                    role: newTutor.role,
+                    subjects: newTutor.subjects,
+                    status: newTutor.status
+                },
+                token
+            }
         });
     } catch (err) {
-        next(new AppError('Error creating account', 500));
+        console.error('Error creating tutor account:', err);
+        next(new AppError('Error creating account: ' + err.message, 500));
     }
 };
 
-// Common functions for both student and tutor applications
 exports.getAllApplications = async (req, res, next) => {
     try {
-        const studentApplications = await StudentApplication.find();
-        const tutorApplications = await TutorApplication.find();
+        const [studentApplications, tutorApplications] = await Promise.all([
+            StudentApplication.find(),
+            TutorApplication.find()
+        ]);
         
         res.status(200).json({
             status: 'success',
             data: {
                 studentApplications,
-                tutorApplications
+                tutorApplications,
+                totalApplications: studentApplications.length + tutorApplications.length
             }
         });
     } catch (err) {
-        next(new AppError('Error fetching applications', 500));
+        next(new AppError('Error fetching applications: ' + err.message, 500));
     }
 };
 
@@ -398,21 +538,22 @@ exports.getApplicationById = async (req, res, next) => {
         } else if (type === 'tutor') {
             application = await TutorApplication.findById(id);
         } else {
-            return next(new AppError('Invalid application type', 400));
+            return next(new AppError('Invalid application type. Must be either "student" or "tutor"', 400));
         }
 
         if (!application) {
-            return next(new AppError('Application not found', 404));
+            return next(new AppError(`${type.charAt(0).toUpperCase() + type.slice(1)} application not found`, 404));
         }
 
         res.status(200).json({
             status: 'success',
             data: {
+                applicationType: type,
                 application
             }
         });
     } catch (err) {
-        next(new AppError('Error fetching application', 500));
+        next(new AppError('Error fetching application: ' + err.message, 500));
     }
 };
 
@@ -421,13 +562,32 @@ exports.updateApplication = async (req, res, next) => {
         const { id, type } = req.params;
         let application;
 
+        // Validate update data based on application type
         if (type === 'student') {
-            application = await StudentApplication.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+            const { error } = validateStudentApplication(req.body);
+            if (error) {
+                return next(new AppError(error.details[0].message, 400));
+            }
         } else if (type === 'tutor') {
-            application = await TutorApplication.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+            const { error } = validateTutorApplication(req.body);
+            if (error) {
+                return next(new AppError(error.details[0].message, 400));
+            }
         } else {
             return next(new AppError('Invalid application type', 400));
         }
+
+        // Update the application
+        const Model = type === 'student' ? StudentApplication : TutorApplication;
+        application = await Model.findByIdAndUpdate(
+            id,
+            { $set: req.body },
+            { 
+                new: true,
+                runValidators: true,
+                context: 'query'
+            }
+        );
 
         if (!application) {
             return next(new AppError('Application not found', 404));
@@ -440,7 +600,7 @@ exports.updateApplication = async (req, res, next) => {
             }
         });
     } catch (err) {
-        next(new AppError('Error updating application', 500));
+        next(new AppError('Error updating application: ' + err.message, 500));
     }
 };
 
@@ -450,9 +610,25 @@ exports.rejectApplication = async (req, res, next) => {
         let application;
 
         if (type === 'student') {
-            application = await StudentApplication.findByIdAndUpdate(id, { status: 'rejected' }, { new: true });
+            application = await StudentApplication.findByIdAndUpdate(
+                id,
+                { 
+                    status: 'rejected',
+                    rejectionReason: req.body.reason || 'Application does not meet our current requirements.',
+                    rejectedAt: new Date()
+                },
+                { new: true }
+            );
         } else if (type === 'tutor') {
-            application = await TutorApplication.findByIdAndUpdate(id, { status: 'rejected' }, { new: true });
+            application = await TutorApplication.findByIdAndUpdate(
+                id,
+                { 
+                    status: 'rejected',
+                    rejectionReason: req.body.reason || 'Application does not meet our current requirements.',
+                    rejectedAt: new Date()
+                },
+                { new: true }
+            );
         } else {
             return next(new AppError('Invalid application type', 400));
         }
@@ -461,19 +637,30 @@ exports.rejectApplication = async (req, res, next) => {
             return next(new AppError('Application not found', 404));
         }
 
-        // Send rejection email
+        // Send rejection email with custom reason if provided
         await sendEmail({
             email: application.personalInfo.email,
-            subject: 'Application Status Update',
-            message: 'We regret to inform you that your application has been rejected. Thank you for your interest.'
+            subject: 'Application Status Update - Clarenest International School',
+            html: `
+                <h1>Application Status Update</h1>
+                <p>Dear ${application.personalInfo.fullName},</p>
+                <p>We regret to inform you that your application to Clarenest International School has not been accepted at this time.</p>
+                ${req.body.reason ? `<p>Reason: ${req.body.reason}</p>` : ''}
+                <p>Thank you for your interest in joining our institution.</p>
+                <p>Best regards,<br>Clarenest International School</p>
+            `
         });
 
         res.status(200).json({
             status: 'success',
-            message: 'Application rejected successfully.'
+            message: 'Application rejected successfully.',
+            data: {
+                application
+            }
         });
     } catch (err) {
-        next(new AppError('Error rejecting application', 500));
+        next(new AppError('Error rejecting application: ' + err.message, 500));
     }
 };
 
+module.exports = exports;

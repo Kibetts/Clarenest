@@ -41,28 +41,52 @@ exports.getAssignment = async (req, res) => {
 
 exports.createAssignment = async (req, res) => {
     try {
-        if (![ROLES.ADMIN, ROLES.TUTOR].includes(req.user.role)) {
-            return res.status(403).json({ message: 'Only admins and tutors can create assignments' });
-        }
 
-        const newAssignment = await Assignment.create({
-            ...req.body,
-            tutor: req.user._id
+        if (req.user.role !== ROLES.ADMIN && req.user.role !== ROLES.TUTOR) {
+            return res.status(403).json({
+                status: 'fail',
+                message: 'You do not have permission to perform this action'
+            });
+        }
+      // Add validation for required fields
+      const { title, description, dueDate, subject, totalPoints, instructions } = req.body;
+      
+      // Validate required fields
+      if (!title || !description || !dueDate || !subject || !totalPoints || !instructions) {
+        return res.status(400).json({
+          status: 'fail',
+          message: 'Missing required fields'
         });
-        
-        res.status(201).json({
-            status: 'success',
-            data: {
-                assignment: newAssignment
-            }
-        });
+      }
+  
+      // Create the assignment
+    //   const assignment = await Assignment.create({
+    //     title,
+    //     description,
+    //     dueDate,
+    //     subject,
+    //     totalPoints,
+    //     instructions,
+    //     tutor: req.user._id
+    //   });
+    const assignment = await Assignment.create({
+        ...req.body,
+        tutor: req.user._id 
+    });
+
+      res.status(201).json({
+        status: 'success',
+        data: {
+          assignment
+        }
+      });
     } catch (err) {
-        res.status(400).json({
-            status: 'fail',
-            message: err.message
-        });
+      res.status(400).json({
+        status: 'fail',
+        message: err.message || 'Failed to create assignment'
+      });
     }
-};
+  };
 
 exports.updateAssignment = async (req, res) => {
     try {

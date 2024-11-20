@@ -52,4 +52,24 @@ router
     .get(tutorController.getTutorAvailability)
     .patch(authorizeRoles(ROLES.TUTOR, ROLES.ADMIN), tutorController.updateTutorAvailability);
 
+// Create Assignment Route
+router.get('/create-assignment', authorizeRoles(ROLES.TUTOR), (req, res) => {
+    res.render('tutor/create-assignment');
+});
+
+// Schedule Assessment Route
+router.get('/schedule-assessment', authorizeRoles(ROLES.TUTOR), (req, res) => {
+    res.render('tutor/schedule-assessment');
+});
+
+// Mark Attendance Route
+router.get('/mark-attendance', authorizeRoles(ROLES.TUTOR), (req, res) => {
+    res.render('tutor/mark-attendance');
+});
+
+// Messages Route
+router.get('/messages', authorizeRoles(ROLES.TUTOR), (req, res) => {
+    res.render('tutor/messages');
+});
+
 module.exports = router;

@@ -5,20 +5,40 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-exports.createAssessment = async (req, res, next) => {
+exports.createAssessment = async (req, res) => {
     try {
-        const newAssessment = await Assessment.create({
-            ...req.body,
-            creator: req.user._id
+      const { title, description, dueDate, subject, totalPoints } = req.body;
+      
+      // Validate required fields
+      if (!title || !description || !dueDate || !subject || !totalPoints) {
+        return res.status(400).json({
+          status: 'fail',
+          message: 'Missing required fields for assessment'
         });
-        res.status(201).json({
-            status: 'success',
-            data: { assessment: newAssessment }
-        });
+      }
+  
+      const assessment = await Assessment.create({
+        title,
+        description,
+        dueDate,
+        subject,
+        totalPoints,
+        tutor: req.user._id
+      });
+  
+      res.status(201).json({
+        status: 'success',
+        data: {
+          assessment
+        }
+      });
     } catch (err) {
-        next(new AppError('Error creating assessment', 400));
+      res.status(400).json({
+        status: 'fail',
+        message: err.message || 'Failed to create assessment'
+      });
     }
-};
+  };
 
 exports.getAllAssessments = async (req, res, next) => {
     try {
@@ -82,7 +102,9 @@ exports.deleteAssessment = async (req, res, next) => {
 
 exports.getStudentAssessments = async (req, res, next) => {
     try {
-        const student = await Student.findById(req.user._id).populate('grade');
+        const student = await Student.findById(req.user._id)
+            .populate('grade')
+            .select('+isEmailVerified +verificationToken +verificationTokenExpires');
         if (!student) {
             return next(new AppError('Student not found', 404));
         }

@@ -54,8 +54,11 @@ const studentApplicationSchema = new mongoose.Schema({
         enum: ['pending', 'approved', 'rejected', 'account_created'],
         default: 'pending'
     },
+
     accountCreationToken: String,
-    accountCreationTokenExpires: Date
+    accountCreationTokenExpires: Date,
+    parentAccountCreationToken: String,
+    parentAccountCreationTokenExpires: Date
 }, { timestamps: true });
 
 const StudentApplication = mongoose.model('StudentApplication', studentApplicationSchema);

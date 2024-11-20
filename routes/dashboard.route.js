@@ -18,5 +18,4 @@ router.get('/admin', authorizeRoles(ROLES.ADMIN), dashboardController.getAdminDa
 // router.get('/admin/system-overview', authorizeRoles(ROLES.ADMIN), dashboardController.getSystemOverview);
 // router.get('/parent/child-performance/:childId', authorizeRoles(ROLES.PARENT), dashboardController.getChildPerformance);
 
-
 module.exports = router;

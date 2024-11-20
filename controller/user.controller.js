@@ -3,7 +3,17 @@ const { ROLES, PERMISSIONS } = require('../config/roles');
 
 exports.getAllUsers = async (req, res) => {
     try {
-        const users = await User.find().select('-password');
+        let query = User.find();
+        
+        // Add role filter if provided
+        if (req.query.role) {
+            query = query.find({ role: req.query.role });
+        }
+        
+        const users = await query
+            // .select('-password +isEmailVerified')
+            // .select('+accountCreationToken +accountCreationTokenExpires');
+            
         res.status(200).json({
             status: 'success',
             results: users.length,
@@ -12,16 +22,20 @@ exports.getAllUsers = async (req, res) => {
             }
         });
     } catch (err) {
+        console.error('Error in getAllUsers:', err);
         res.status(500).json({
             status: 'error',
-            message: err.message
+            message: err.message || 'Error fetching users'
         });
     }
 };
 
+
 exports.getMe = async (req, res, next) => {
-    // req.user is set by the authMiddleware
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id)
+        .select('-password +isEmailVerified')
+        .select('+verificationToken +verificationTokenExpires')
+        .select('+accountCreationToken +accountCreationTokenExpires');
 
     if (!user) {
         return next(new AppError('User not found', 404));
@@ -47,17 +61,23 @@ exports.getMe = async (req, res, next) => {
     });
 };
 
+
 exports.getUser = async (req, res) => {
     try {
-        const user = await User.findById(req.params.id).select('-password');
+        // Only select password if specifically requested and user is authorized
+        const selectFields = req.query.includePassword && req.user.role === 'admin' 
+            ? '+password +verificationToken +verificationTokenExpires' 
+            : '-password';
+            
+        const user = await User.findById(req.params.id)
+            .select(selectFields);
+
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
         res.status(200).json({
             status: 'success',
-            data: {
-                user
-            }
+            data: { user }
         });
     } catch (err) {
         res.status(500).json({
@@ -66,7 +86,6 @@ exports.getUser = async (req, res) => {
         });
     }
 };
-
 exports.updateUser = async (req, res) => {
     try {
         if (req.body.role && req.user.role !== ROLES.ADMIN) {
@@ -151,6 +170,65 @@ exports.deleteUser = async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: err.message
+        });
+    }
+};
+
+// exports.updateUserStatus = async (req, res) => {
+//     try {
+//       await User.findByIdAndUpdate(req.user._id, {
+//         status: 'online',
+//         lastActive: new Date()
+//       });
+      
+//       res.status(200).json({
+//         status: 'success',
+//         message: 'User status updated'
+//       });
+//     } catch (err) {
+//       res.status(500).json({
+//         status: 'error',
+//         message: err.message
+//       });
+//     }
+//   };
+exports.updateUserStatus = async (req, res) => {
+    try {
+        // Check if user is authenticated
+        if (!req.user) {
+            return res.status(401).json({
+                status: 'fail',
+                message: 'Authentication required'
+            });
+        }
+
+        // Update user status
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user._id,
+            {
+                status: 'online',
+                lastActive: new Date()
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                status: 'fail',
+                message: 'User not found'
+            });
+        }
+
+        res.status(200).json({
+            status: 'success',
+            message: 'User status updated successfully'
+        });
+    } catch (err) {
+        console.error('Error updating user status:', err);
+        res.status(500).json({
+            status: 'error',
+            message: 'Error updating user status',
+            error: err.message
         });
     }
 };

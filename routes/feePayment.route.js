@@ -7,6 +7,17 @@ const { ROLES } = require('../config/roles');
 // All routes require authentication
 router.use(authenticateJWT);
 
+router.get('/payments', 
+    authorizeRoles(ROLES.ADMIN), 
+    feePaymentController.getPayments
+);
+
+// Get student payments
+router.get('/student/:studentId/payments', 
+    authorizeRoles(ROLES.ADMIN, ROLES.STUDENT, ROLES.PARENT), 
+    feePaymentController.getStudentPayments
+);
+
 // Record payment - Admin only
 router.post('/record-payment', 
     authorizeRoles(ROLES.ADMIN), 

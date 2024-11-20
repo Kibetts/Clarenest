@@ -4,15 +4,20 @@ const Attendance = require('../models/attendance.model');
 const AppError = require('../utils/appError');
 
 exports.getAllStudents = async (req, res, next) => {
-    const students = await Student.find().select('-password');
+    try {
+        const students = await Student.find()
+            .select('-password +isEmailVerified')
+            .select('+accountCreationToken +accountCreationTokenExpires');
 
-    res.status(200).json({
-        status: 'success',
-        results: students.length,
-        data: { students }
-    });
+        res.status(200).json({
+            status: 'success',
+            results: students.length,
+            data: { students }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching students', 500));
+    }
 };
-
 exports.createStudent = async (req, res, next) => {
     const newStudent = await Student.create(req.body);
 
@@ -23,7 +28,9 @@ exports.createStudent = async (req, res, next) => {
 };
 
 exports.getStudent = async (req, res, next) => {
-    const student = await Student.findById(req.params.id).select('-password');
+    const student = await Student.findById(req.params.id)
+        .select('-password +verificationToken +verificationTokenExpires')
+        .select('+accountCreationToken +accountCreationTokenExpires');
 
     if (!student) {
         return next(new AppError('No student found with that ID', 404));

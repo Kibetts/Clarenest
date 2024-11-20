@@ -8,6 +8,9 @@ const router = express.Router();
 
 router.use(authenticateJWT);
 
+router.get('/:lessonId/students',  lessonController.getLessonStudents);
+
+
 router
     .route('/')
     .get(checkFeesPaid, lessonController.getAllLessons)
@@ -18,7 +21,6 @@ router
     .get(checkFeesPaid, lessonController.getLesson)
     .patch(authorizeRoles(ROLES.ADMIN), lessonController.updateLesson)
     .delete(authorizeRoles(ROLES.ADMIN), lessonController.deleteLesson);
-
 router.post('/:id/enroll', authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), lessonController.enrollStudent);
 
 module.exports = router;

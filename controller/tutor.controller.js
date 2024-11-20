@@ -4,7 +4,10 @@ const AppError = require('../utils/appError');
 
 exports.getAllTutors = async (req, res, next) => {
     try {
-        const tutors = await Tutor.find().select('-password');
+        const tutors = await Tutor.find()
+            // .select('-password +isEmailVerified')
+            // .select('+accountCreationToken +accountCreationTokenExpires');
+            
         res.status(200).json({
             status: 'success',
             results: tutors.length,
@@ -14,7 +17,6 @@ exports.getAllTutors = async (req, res, next) => {
         next(new AppError('Error fetching tutors', 500));
     }
 };
-
 exports.createTutor = async (req, res, next) => {
     try {
         const newTutor = await Tutor.create(req.body);
@@ -29,7 +31,10 @@ exports.createTutor = async (req, res, next) => {
 
 exports.getTutor = async (req, res, next) => {
     try {
-        const tutor = await Tutor.findById(req.params.id).select('-password');
+        const tutor = await Tutor.findById(req.params.id)
+            .select('-password +verificationToken +verificationTokenExpires')
+            .select('+accountCreationToken +accountCreationTokenExpires');
+
         if (!tutor) {
             return next(new AppError('No tutor found with that ID', 404));
         }

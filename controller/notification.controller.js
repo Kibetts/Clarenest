@@ -15,15 +15,27 @@ exports.getUserNotifications = async (req, res, next) => {
 };
 
 exports.createNotification = async (req, res, next) => {
-    const newNotification = await Notification.create({
-        ...req.body,
-        recipient: req.body.recipientId
-    });
+    try {
+        // Check recipient exists and is verified
+        const recipient = await User.findById(req.body.recipientId)
+            .select('+isEmailVerified');
+            
+        if (!recipient || !recipient.isEmailVerified) {
+            return next(new AppError('Invalid or unverified recipient', 400));
+        }
 
-    res.status(201).json({
-        status: 'success',
-        data: { notification: newNotification }
-    });
+        const newNotification = await Notification.create({
+            ...req.body,
+            recipient: req.body.recipientId
+        });
+
+        res.status(201).json({
+            status: 'success',
+            data: { notification: newNotification }
+        });
+    } catch (err) {
+        next(new AppError('Error creating notification', 500));
+    }
 };
 
 exports.getNotification = async (req, res, next) => {

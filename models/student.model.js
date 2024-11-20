@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const User = require('./user.model');
+const { GRADE_FEES } = require('../config/constants');
+
 
 const studentSchema = new mongoose.Schema({
     enrollmentDate: {
@@ -36,6 +38,13 @@ const studentSchema = new mongoose.Schema({
     lastActive: {
         type: Date,
         default: Date.now
+    },
+    temporaryAccess: {
+        granted: {
+            type: Boolean,
+            default: false
+        },
+        expiresAt: Date
     }
 }, {
     discriminatorKey: 'role',
@@ -59,7 +68,8 @@ studentSchema.methods.updateStatus = function(status) {
 
 // Pre-save middleware
 studentSchema.pre('save', function(next) {
-    if (this.isNew) {
+    if (this.isNew || this.isModified('grade')) {
+        this.totalFees = GRADE_FEES[this.grade] || 0,
         this.role = 'student';
     }
     next();

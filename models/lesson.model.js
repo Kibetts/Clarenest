@@ -16,9 +16,13 @@ const lessonSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
+    // students: [{
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     ref: 'User'
+    // }],
     students: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+        ref: 'Student'
     }],
     schedule: [{
         day: {
@@ -27,11 +31,11 @@ const lessonSchema = new mongoose.Schema({
             required: true
         },
         startTime: {
-            type: String,
+            type: Date,
             required: true
         },
         endTime: {
-            type: String,
+            type: Date,
             required: true
         }
     }],

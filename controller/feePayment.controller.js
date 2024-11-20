@@ -1,52 +1,66 @@
 const User = require('../models/user.model');
+const Student = require('../models/student.model');
 const FeePayment = require('../models/feePayment.model');
 const AppError = require('../utils/appError');
 const { sendNotification } = require('../utils/notification.util');
 
 exports.recordPayment = async (req, res, next) => {
     try {
-        const { studentId, amount, paymentMethod, transactionId, notes } = req.body;
+        const { studentId, amount, paymentMethod, notes } = req.body;
 
-        const student = await User.findById(studentId);
-        if (!student || student.role !== 'student') {
+        const student = await Student.findById(studentId);
+        if (!student) {
             return next(new AppError('Student not found', 404));
         }
 
+        const totalFees = student.totalFees || 0;
+        const currentPaidFees = student.paidFees || 0;
+        const newPaidAmount = currentPaidFees + parseFloat(amount);
+
+        // Create payment record
         const payment = await FeePayment.create({
             student: studentId,
-            amount,
+            amount: parseFloat(amount),
             paymentMethod,
-            transactionId,
-            notes
+            notes,
+            paymentDate: new Date()
         });
 
-        student.paidFees += amount;
-        if (student.paidFees >= student.totalFees) {
+        // Update student's fee status
+        student.paidFees = newPaidAmount;
+        if (newPaidAmount >= totalFees) {
             student.feeStatus = 'paid';
             student.nextPaymentDue = null;
         } else {
             student.feeStatus = 'partial';
-            // Set next payment due date to 30 days from now
             student.nextPaymentDue = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         }
 
         await student.save();
 
-        // Send notification to student
+        // Send notification
         await sendNotification(
             student._id,
-            `A payment of ${amount} has been recorded for your account.`,
-            'Other'
+            `Payment of $${amount} recorded successfully.`,
+            'payment'
         );
+
         res.status(201).json({
             status: 'success',
             data: {
                 payment,
-                studentFeeStatus: student.feeStatus
+                student: {
+                    id: student._id,
+                    name: student.name,
+                    grade: student.grade,
+                    totalFees: student.totalFees,
+                    paidFees: student.paidFees,
+                    feeStatus: student.feeStatus
+                }
             }
         });
     } catch (err) {
-        next(err);
+        next(new AppError('Error recording payment: ' + err.message, 500));
     }
 };
 
@@ -54,30 +68,72 @@ exports.grantTemporaryAccess = async (req, res, next) => {
     try {
         const { studentId, durationInDays } = req.body;
 
-        const student = await User.findById(studentId);
-        if (!student || student.role !== 'student') {
+        if (!studentId || !durationInDays) {
+            return next(new AppError('Student ID and duration are required', 400));
+        }
+
+        const student = await Student.findById(studentId);
+        if (!student) {
             return next(new AppError('Student not found', 404));
         }
 
-        student.temporaryAccess.granted = true;
-        student.temporaryAccess.expiresAt = new Date(Date.now() + durationInDays * 24 * 60 * 60 * 1000);
+        // Set temporary access
+        student.temporaryAccess = {
+            granted: true,
+            expiresAt: new Date(Date.now() + (durationInDays * 24 * 60 * 60 * 1000))
+        };
 
         await student.save();
 
-        // Send notification to student
         await sendNotification(
             student._id,
             `You have been granted temporary access for ${durationInDays} days.`,
-            'Other'
+            'access_granted'
         );
+
         res.status(200).json({
             status: 'success',
+            message: 'Temporary access granted successfully',
             data: {
                 temporaryAccess: student.temporaryAccess
             }
         });
     } catch (err) {
-        next(err);
+        next(new AppError('Error granting temporary access: ' + err.message, 500));
+    }
+};
+
+exports.getPayments = async (req, res, next) => {
+    try {
+        const payments = await FeePayment.find()
+            .populate('student', 'name grade')
+            .sort('-paymentDate');
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                payments
+            }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching payments', 500));
+    }
+};
+
+exports.getStudentPayments = async (req, res, next) => {
+    try {
+        const payments = await FeePayment.find({ student: req.params.studentId })
+            .populate('student', 'name grade')
+            .sort('-paymentDate');
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                payments
+            }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching student payments', 500));
     }
 };
 

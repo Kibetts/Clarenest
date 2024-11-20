@@ -19,6 +19,11 @@ const feePaymentSchema = new mongoose.Schema({
         enum: ['cash', 'credit_card', 'bank_transfer'],
         required: true
     },
+    status: {
+        type: String,
+        enum: ['pending', 'completed', 'failed'],
+        default: 'completed'
+    },
     transactionId: String,
     notes: String
 }, { timestamps: true });

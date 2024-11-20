@@ -12,6 +12,8 @@ const compression = require('compression');
 const morgan = require('morgan');
 const AppError = require('./utils/appError');
 const globalErrorHandler = require('./controller/error.controller');
+const { connectWithRetry, setupConnectionHandlers } = require('./config/database');
+
 
 // Import routes
 const authRoutes = require('./routes/auth.route');
@@ -34,6 +36,9 @@ const scheduledTasks = require('./utils/scheduledTasks');
 const documentRoutes = require('./routes/document.route');
 const assessmentRoutes = require('./routes/assessment.route');
 const feePaymentRoutes = require('./routes/feePayment.route');
+const testimonialRoutes = require('./routes/testimonial.route');
+
+
 
 
 const app = express();
@@ -135,6 +140,10 @@ app.use('/api/assessments', assessmentRoutes);
 app.use('/uploads', express.static('uploads'));
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/fee-payment', feePaymentRoutes)
+app.use('/api/testimonials', testimonialRoutes);
+app.use('/api/users', userRoutes);
+
+
 
 
 app.use((err, req, res, next) => {
@@ -155,61 +164,50 @@ app.use('*', (req, res, next) => {
 mongoose.set('strictQuery', false);
 
 // MongoDB
-mongoose.set('strictQuery', false); // Add this line to handle deprecation warning
-
-const connectDB = async () => {
+const startServer = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGODB_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-            socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
-        });
+        // Setup MongoDB connection handlers
+        setupConnectionHandlers();
         
-        console.log(`MongoDB Connected: ${conn.connection.host}`);
-        
-        // Handle connection events
-        mongoose.connection.on('error', err => {
-            console.error('MongoDB connection error:', err);
+        // Attempt to connect to MongoDB
+        await connectWithRetry();
+
+        // Start server only after successful database connection
+        const port = process.env.PORT || 5000;
+        const server = app.listen(port, () => {
+            console.log(`Server running on port ${port}`);
         });
 
-        mongoose.connection.on('disconnected', () => {
-            console.log('MongoDB disconnected');
-        });
+        // Handle server shutdown
+        const gracefulShutdown = async () => {
+            console.log('Received shutdown signal...');
+            try {
+                await mongoose.connection.close();
+                console.log('MongoDB connection closed');
+                server.close(() => {
+                    console.log('Server closed');
+                    process.exit(0);
+                });
+            } catch (err) {
+                console.error('Error during shutdown:', err);
+                process.exit(1);
+            }
+        };
 
-        mongoose.connection.on('reconnected', () => {
-            console.log('MongoDB reconnected');
+        // Handle various shutdown signals
+        process.on('SIGTERM', gracefulShutdown);
+        process.on('SIGINT', gracefulShutdown);
+        process.on('unhandledRejection', (err) => {
+            console.log('UNHANDLED REJECTION! Shutting down...');
+            console.error(err);
+            gracefulShutdown();
         });
 
     } catch (error) {
-        console.error('Error connecting to MongoDB:', error);
+        console.error('Failed to start server:', error);
         process.exit(1);
     }
 };
 
-connectDB();
-
-// Server
-const port = process.env.PORT || 3000;
-const server = app.listen(port, () => {
-    console.log(`App running on port ${port}...`);
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', err => {
-    console.log('UNHANDLED REJECTION! Shutting down...');
-    console.log(err.name, err.message);
-    server.close(() => {
-        process.exit(1);
-    });
-});
-
-// Handle SIGTERM
-process.on('SIGTERM', () => {
-    console.log('SIGTERM RECEIVED. Shutting down gracefully');
-    server.close(() => {
-        console.log('Process terminated!');
-    });
-});
-
+startServer();
 module.exports = app;

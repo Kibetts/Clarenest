@@ -5,6 +5,8 @@ const { ROLES } = require('../config/roles');
 
 const router = express.Router();
 
+
+router.post('/heartbeat', authenticateJWT, userController.updateUserStatus);
 router.use(authenticateJWT);
 
 router.get('/me', userController.getMe);

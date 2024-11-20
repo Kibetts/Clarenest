@@ -5,6 +5,9 @@ const { ROLES } = require('../config/roles');
 
 const router = express.Router();
 
+router.post('/create-account/:token', parentController.createParentAccount);
+
+
 router.use(authenticateJWT);
 
 router.post('/register/:studentId', parentController.registerParent);

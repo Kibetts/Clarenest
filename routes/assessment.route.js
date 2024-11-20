@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.use(authenticateJWT);
 
+
 router.post(
     '/distribute',authorizeRoles(ROLES.TUTOR),assessmentController.distributeToParents);
 

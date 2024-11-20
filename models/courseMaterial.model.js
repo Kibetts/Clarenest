@@ -36,3 +36,4 @@ const courseMaterialSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const CourseMaterial = mongoose.model('CourseMaterial', courseMaterialSchema);
+module.exports = CourseMaterial;

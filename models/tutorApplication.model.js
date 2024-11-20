@@ -65,13 +65,15 @@ const tutorApplicationSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'approved', 'rejected'],
+        enum: ['pending', 'approved', 'rejected', 'account_created'],
         default: 'pending'
     },
     applicationDate: {
         type: Date,
         default: Date.now
-    }
+    },
+    accountCreationToken: String,
+    accountCreationTokenExpires: Date
 });
 
 // Clean up files when application is deleted
@@ -91,7 +93,7 @@ tutorApplicationSchema.pre('remove', async function(next) {
     if (this.documents.governmentId) {
         await deleteFile(this.documents.governmentId.path);
     }
-    
+
     next();
 });
 

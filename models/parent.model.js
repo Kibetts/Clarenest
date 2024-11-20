@@ -6,6 +6,11 @@ const parentSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Student'
     }],
+    email: {
+        type: String,
+        required: true,
+        unique: true  
+    },
     relationship: {
         type: String,
         required: [true, 'Relationship to student is required'],
