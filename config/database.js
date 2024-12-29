@@ -6,7 +6,7 @@ const connectWithRetry = async (retries = 5, delay = 5000) => {
         try {
             // First, try to resolve DNS
             const uri = new URL(process.env.MONGODB_URI);
-            console.log(`Attempting to resolve DNS for ${uri.hostname}...`);
+            console.log(`Attempting to resolve DNS for ${uri.hostname}...`); // debugging log
             
             try {
                 await dns.lookup(uri.hostname);

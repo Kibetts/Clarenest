@@ -33,10 +33,6 @@ const subjectSchema = new mongoose.Schema({
         ref: 'User',
         required: [true, 'Subject must have a tutor']
     },
-    price: {
-        type: Number,
-        required: [true, 'Subject price is required']
-    },
     isActive: {
         type: Boolean,
         default: true
