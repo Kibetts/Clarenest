@@ -202,8 +202,6 @@ exports.approveStudentApplication = async (req, res, next) => {
 
 exports.createStudentAccount = async (req, res, next) => {
     try {
-        console.log('Creating student account with token:', req.params.token);
-        
         const hashedToken = crypto
             .createHash('sha256')
             .update(req.params.token)
@@ -234,12 +232,17 @@ exports.createStudentAccount = async (req, res, next) => {
             password: req.body.password,
             role: 'student',
             grade: application.educationalInfo.currentGradeLevel,
-            subjects: [],
-            status: 'offline',  // Changed from 'active' to 'offline'
+            status: 'offline',
             isEmailVerified: true,
             enrollmentDate: new Date(),
             lastActive: new Date()
         });
+
+        // Automatically enroll student in subjects for their grade
+        await enrollStudentInGradeSubjects(
+            newStudent._id, 
+            application.educationalInfo.currentGradeLevel
+        );
 
         // Update application
         application.status = 'account_created';

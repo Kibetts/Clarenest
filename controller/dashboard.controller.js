@@ -16,6 +16,9 @@ const User = require('../models/user.model');
 const FeePayment = require('../models/feePayment.model');
 const Notification = require('../models/notification.model');
 const AppError = require('../utils/appError');
+const Enrollment = require('../models/enrollment.model');
+
+const { enrollStudentInGradeSubjects } = require('../services/enrollment.service');
 
 // exports.getStudentDashboard = async (req, res, next) => {
 //     try {
@@ -307,97 +310,78 @@ const AppError = require('../utils/appError');
 exports.getStudentDashboard = async (req, res, next) => {
     try {
         const studentId = req.user._id;
-        
-        // Fetch student's basic info with populated subjects
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Get student with populated enrollments
         const student = await Student.findById(studentId)
-            .populate('subjects')
-            .select('name email grade subjects');
+            .populate({
+                path: 'subjects',
+                populate: {
+                    path: 'tutor',
+                    select: 'name email'
+                }
+            });
 
         if (!student) {
             return next(new AppError('Student not found', 404));
         }
 
-        // Get current date
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Get active enrollments
+        const enrollments = await Enrollment.find({
+            student: studentId,
+            status: 'active'
+        }).populate('subject');
 
-        // Fetch lessons where student is enrolled
-        const lessons = await Lesson.find({
-            students: studentId
+        // Get today's lessons
+        const todayLessons = await Lesson.find({
+            _id: { $in: enrollments.reduce((acc, enr) => [...acc, ...enr.lessons], []) },
+            'schedule.startTime': {
+                $gte: today,
+                $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+            }
         }).populate('subject tutor');
 
-        // Process lessons into schedule and upcoming lessons
-        const todaySchedule = [];
-        const upcomingLessons = [];
-        
-        lessons.forEach(lesson => {
-            lesson.schedule.forEach(slot => {
-                const startTime = new Date(slot.startTime);
-                const endTime = new Date(slot.endTime);
+        // Get upcoming lessons
+        const upcomingLessons = await Lesson.find({
+            _id: { $in: enrollments.reduce((acc, enr) => [...acc, ...enr.lessons], []) },
+            'schedule.startTime': { $gt: today }
+        })
+        .populate('subject tutor')
+        .sort('schedule.startTime')
+        .limit(5);
 
-                if (startTime.toDateString() === today.toDateString()) {
-                    todaySchedule.push({
-                        id: lesson._id,
-                        subject: {
-                            id: lesson.subject._id,
-                            title: lesson.subject.title
-                        },
-                        tutor: {
-                            id: lesson.tutor._id,
-                            name: lesson.tutor.name
-                        },
-                        startTime: startTime.toISOString(),
-                        endTime: endTime.toISOString()
-                    });
-                }
-                
-                if (startTime > today) {
-                    upcomingLessons.push({
-                        id: lesson._id,
-                        subject: {
-                            id: lesson.subject._id,
-                            title: lesson.subject.title
-                        },
-                        tutor: {
-                            id: lesson.tutor._id,
-                            name: lesson.tutor.name
-                        },
-                        startTime: startTime.toISOString(),
-                        endTime: endTime.toISOString(),
-                        duration: Math.round((endTime - startTime) / (1000 * 60))
-                    });
-                }
-            });
-        });
+        // Get assignments and assessments
+        const assignments = await Assignment.find({
+            subject: { $in: student.subjects },
+            dueDate: { $gt: today }
+        }).populate('subject');
 
-        // Sort schedules
-        todaySchedule.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
-        upcomingLessons.sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+        const assessments = await Assessment.find({
+            subject: { $in: student.subjects },
+            dueDate: { $gt: today }
+        }).populate('subject');
 
-        //  attendance 
+        // Calculate attendance
         const attendanceRecords = await Attendance.find({
-            'attendees.student': student._id
-        });
+            'attendees.student': studentId
+        })
+        .populate({
+            path: 'lesson',
+            populate: { path: 'subject tutor' }
+        })
+        .sort('-date');
 
-        const attendancePercentage = attendanceRecords.length > 0
-            ? (attendanceRecords.filter(a => 
-                a.attendees.find(att => 
-                    att.student.toString() === student._id.toString() && 
-                    att.status === 'Present'
-                )
-            ).length / attendanceRecords.length) * 100
-            : 0;
+        const totalClasses = attendanceRecords.length;
+        const presentClasses = attendanceRecords.filter(record => 
+            record.attendees.find(att => 
+                att.student.toString() === studentId.toString() && 
+                att.status === 'Present'
+            )
+        ).length;
 
-        const recentGrades = await Result.find({ student: student._id })
-            .populate('subject')
-            .sort('-createdAt')
-            .limit(5);
+        const attendancePercentage = totalClasses ? (presentClasses / totalClasses) * 100 : 0;
 
-        const overallGrade = recentGrades.length > 0
-            ? recentGrades.reduce((sum, grade) => sum + grade.score, 0) / recentGrades.length
-            : null;
-
-        // Format response data
         res.status(200).json({
             status: 'success',
             data: {
@@ -408,17 +392,18 @@ exports.getStudentDashboard = async (req, res, next) => {
                     grade: student.grade
                 },
                 dashboard: {
-                    upcomingLessons: upcomingLessons.slice(0, 5),
+                    schedule: [{
+                        date: today.toISOString(),
+                        lessons: todayLessons
+                    }],
+                    upcomingLessons,
                     attendance: {
                         records: attendanceRecords,
                         percentage: attendancePercentage
                     },
-                    recentGrades,
-                    overallGrade,
-                    schedule: [{
-                        date: today.toISOString(),
-                        lessons: todaySchedule
-                    }]
+                    activeAssignments: assignments,
+                    upcomingAssessments: assessments,
+                    enrollments
                 }
             }
         });
@@ -428,14 +413,6 @@ exports.getStudentDashboard = async (req, res, next) => {
         next(new AppError('Error fetching student dashboard', 500));
     }
 };
-
-// Utility function to calculate duration between two times
-function calculateDuration(startTime, endTime) {
-    const start = new Date(`1970/01/01 ${startTime}`);
-    const end = new Date(`1970/01/01 ${endTime}`);
-    return Math.round((end - start) / (1000 * 60)); // Duration in minutes
-}
-
 exports.getTutorDashboard = async (req, res, next) => {
     try {
         console.log('Received tutor dashboard request for user:', req.user);
