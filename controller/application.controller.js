@@ -12,6 +12,7 @@ const sendEmail = require('../utils/email.util');
 const AppError = require('../utils/appError');
 const { uploadFile } = require('../utils/fileUpload.util');
 const { validateStudentApplication, validateTutorApplication, validateTutorFiles } = require('../validators/applicationValidators');
+const { enrollStudentInGradeSubjects } = require('../services/enrollment.service');
 
 // Helper function for token creation
 const createToken = () => {
@@ -103,6 +104,106 @@ exports.submitStudentApplication = async (req, res, next) => {
         next(new AppError('Error processing application', 500));
     }
 };
+
+// exports.approveStudentApplication = async (req, res, next) => {
+//     try {
+//         const application = await StudentApplication.findById(req.params.id);
+//         if (!application) {
+//             return next(new AppError('Student application not found', 404));
+//         }
+
+//         if (application.status !== 'pending') {
+//             return next(new AppError('Application has already been processed', 400));
+//         }
+
+//         // Generate tokens for both student and parent
+//         const studentTokens = createToken();
+//         const parentTokens = createToken();
+
+//         // Update application status and set student token
+//         application.status = 'approved';
+//         application.accountCreationToken = studentTokens.hashedToken;
+//         application.accountCreationTokenExpires = Date.now() + 24 * 60 * 60 * 1000;
+
+//         // Store parent token in application
+//         application.parentAccountCreationToken = parentTokens.hashedToken;
+//         application.parentAccountCreationTokenExpires = Date.now() + 24 * 60 * 60 * 1000;
+
+//         // Validate email addresses before sending
+//         if (!application.personalInfo.email) {
+//             return next(new AppError('Student email is missing', 400));
+//         }
+
+//         if (!application.parentInfo.email) {
+//             return next(new AppError('Parent email is missing', 400));
+//         }
+
+//         try {
+//             await application.save();
+
+//             // Send student account creation email
+//             const studentURL = `${process.env.FRONTEND_URL}/create-account/student/${studentTokens.rawToken}`;
+//             await sendEmail({
+//                 email: application.personalInfo.email,
+//                 subject: 'Student Application Approved - Create Your Account',
+//                 html: `
+//                     <h1>Application Approved!</h1>
+//                     <p>Dear ${application.personalInfo.fullName},</p>
+//                     <p>Your application to Clarenest International School has been approved.</p>
+//                     <p>Please create your student account by clicking the button below:</p>
+//                     <a href="${studentURL}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
+//                         Create Student Account
+//                     </a>
+//                     <p>This link will expire in 24 hours.</p>
+//                     <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+//                     <p>${studentURL}</p>
+//                 `
+//             });
+
+//             // Send parent account creation email
+//             // const parentURL = `${process.env.FRONTEND_URL}/create-account/parent/${parentTokens.rawToken}`;
+//             const parentURL = `${process.env.REACT_APP_FRONTEND_URL}/parent/register/${studentId}`;
+
+
+
+//             await sendEmail({
+//                 email: application.parentInfo.email,
+//                 subject: 'Create Parent Account - Clarenest International School',
+//                 html: `
+//                     <h1>Welcome to Clarenest International School</h1>
+//                     <p>Dear ${application.parentInfo.name},</p>
+//                     <p>Your child's application has been approved.</p>
+//                     <p>Please create your parent account by clicking the button below:</p>
+//                     <a href="${parentURL}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
+//                         Create Parent Account
+//                     </a>
+//                     <p>This link will expire in 24 hours.</p>
+//                     <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+//                     <p>${parentURL}</p>
+//                 `
+//             });
+
+//         } catch (emailError) {
+//             console.error('Error sending approval emails:', emailError);
+//             application.status = 'pending';
+//             application.accountCreationToken = undefined;
+//             application.accountCreationTokenExpires = undefined;
+//             application.parentAccountCreationToken = undefined;
+//             application.parentAccountCreationTokenExpires = undefined;
+//             await application.save();
+//             return next(new AppError('Error sending approval emails. Please try again.', 500));
+//         }
+
+//         res.status(200).json({
+//             status: 'success',
+//             message: 'Application approved. Account creation instructions sent to both student and parent.'
+//         });
+//     } catch (err) {
+//         console.error('Error in approveStudentApplication:', err);
+//         next(new AppError('Error approving application: ' + err.message, 500));
+//     }
+// };
+
 
 exports.approveStudentApplication = async (req, res, next) => {
     try {
@@ -198,7 +299,6 @@ exports.approveStudentApplication = async (req, res, next) => {
         next(new AppError('Error approving application: ' + err.message, 500));
     }
 };
-
 
 exports.createStudentAccount = async (req, res, next) => {
     try {
@@ -428,6 +528,89 @@ exports.approveTutorApplication = async (req, res, next) => {
     }
 };
 
+// exports.createTutorAccount = async (req, res, next) => {
+//     try {
+//         console.log('Creating tutor account with token:', req.params.token);
+        
+//         const hashedToken = crypto
+//             .createHash('sha256')
+//             .update(req.params.token)
+//             .digest('hex');
+
+//         const application = await TutorApplication.findOne({
+//             accountCreationToken: hashedToken,
+//             accountCreationTokenExpires: { $gt: Date.now() }
+//         });
+
+//         if (!application) {
+//             return next(new AppError('Invalid or expired token', 400));
+//         }
+
+//         // Check for existing user
+//         const existingUser = await User.findOne({ 
+//             email: application.personalInfo.email 
+//         });
+
+//         if (existingUser) {
+//             return next(new AppError('An account with this email already exists', 400));
+//         }
+
+//         // Format qualifications properly
+//         const formattedQualifications = application.professionalInfo.academicQualifications.map(qual => ({
+//             degree: qual,
+//             institution: 'Not Specified',
+//             year: new Date().getFullYear()
+//         }));
+
+//         // Create new tutor
+//         const newTutor = await Tutor.create({
+//             name: application.personalInfo.fullName,
+//             email: application.personalInfo.email,
+//             password: req.body.password,
+//             role: 'tutor',
+//             subjects: application.professionalInfo.subjectsSpecialization,
+//             qualifications: formattedQualifications,  // Using formatted qualifications
+//             yearsOfExperience: application.professionalInfo.teachingExperience || 0,
+//             preferredGradeLevels: application.professionalInfo.preferredGradeLevels || [],
+//             status: 'offline',  // Changed from 'active' to 'offline'
+//             isEmailVerified: true,
+//             lastActive: new Date()
+//         });
+
+//         // Update application
+//         application.status = 'account_created';
+//         application.accountCreationToken = undefined;
+//         application.accountCreationTokenExpires = undefined;
+//         await application.save();
+
+//         // Generate token for immediate login
+//         const token = jwt.sign(
+//             { id: newTutor._id },
+//             process.env.JWT_SECRET,
+//             { expiresIn: process.env.JWT_EXPIRES_IN }
+//         );
+
+//         res.status(201).json({
+//             status: 'success',
+//             message: 'Tutor account created successfully',
+//             data: {
+//                 user: {
+//                     id: newTutor._id,
+//                     name: newTutor.name,
+//                     email: newTutor.email,
+//                     role: newTutor.role,
+//                     subjects: newTutor.subjects,
+//                     status: newTutor.status
+//                 },
+//                 token
+//             }
+//         });
+//     } catch (err) {
+//         console.error('Error creating tutor account:', err);
+//         next(new AppError('Error creating account: ' + err.message, 500));
+//     }
+// };
+
 exports.createTutorAccount = async (req, res, next) => {
     try {
         console.log('Creating tutor account with token:', req.params.token);
@@ -439,7 +622,8 @@ exports.createTutorAccount = async (req, res, next) => {
 
         const application = await TutorApplication.findOne({
             accountCreationToken: hashedToken,
-            accountCreationTokenExpires: { $gt: Date.now() }
+            accountCreationTokenExpires: { $gt: Date.now() },
+            status: 'approved'  
         });
 
         if (!application) {
@@ -469,10 +653,10 @@ exports.createTutorAccount = async (req, res, next) => {
             password: req.body.password,
             role: 'tutor',
             subjects: application.professionalInfo.subjectsSpecialization,
-            qualifications: formattedQualifications,  // Using formatted qualifications
+            qualifications: formattedQualifications,
             yearsOfExperience: application.professionalInfo.teachingExperience || 0,
             preferredGradeLevels: application.professionalInfo.preferredGradeLevels || [],
-            status: 'offline',  // Changed from 'active' to 'offline'
+            status: 'offline',
             isEmailVerified: true,
             lastActive: new Date()
         });

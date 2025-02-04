@@ -310,10 +310,15 @@ const { enrollStudentInGradeSubjects } = require('../services/enrollment.service
 exports.getStudentDashboard = async (req, res, next) => {
     try {
         const studentId = req.user._id;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const now = new Date();
+        const startOfDay = new Date(now.setHours(0,0,0,0));
+        const endOfDay = new Date(now.setHours(23,59,59,999));
 
-        // Get student with populated enrollments
+        // Get current academic year
+        const currentYear = new Date().getFullYear();
+        const academicYear = `${currentYear}-${currentYear + 1}`;
+
+        // Get student with populated subjects
         const student = await Student.findById(studentId)
             .populate({
                 path: 'subjects',
@@ -327,40 +332,71 @@ exports.getStudentDashboard = async (req, res, next) => {
             return next(new AppError('Student not found', 404));
         }
 
-        // Get active enrollments
-        const enrollments = await Enrollment.find({
-            student: studentId,
-            status: 'active'
-        }).populate('subject');
+        const studentGrade = student.grade;
 
-        // Get today's lessons
+        // Check if student needs to be enrolled in subjects
+        if (!student.subjects || student.subjects.length === 0) {
+            console.log('No subjects found for student. Attempting to enroll...');
+            try {
+                await enrollStudentInGradeSubjects(studentId, studentGrade);
+                // Reload student with newly enrolled subjects
+                student = await Student.findById(studentId).populate({
+                    path: 'subjects',
+                    populate: {
+                        path: 'tutor',
+                        select: 'name email'
+                    }
+                });
+            } catch (enrollError) {
+                console.error('Error enrolling student in subjects:', enrollError);
+            }
+        }
+
+        // Get today's lessons matching the student's grade
         const todayLessons = await Lesson.find({
-            _id: { $in: enrollments.reduce((acc, enr) => [...acc, ...enr.lessons], []) },
+            gradeLevel: studentGrade,
             'schedule.startTime': {
-                $gte: today,
-                $lt: new Date(today.getTime() + 24 * 60 * 60 * 1000)
+                $gte: startOfDay,
+                $lt: endOfDay
             }
         }).populate('subject tutor');
 
         // Get upcoming lessons
         const upcomingLessons = await Lesson.find({
-            _id: { $in: enrollments.reduce((acc, enr) => [...acc, ...enr.lessons], []) },
-            'schedule.startTime': { $gt: today }
+            gradeLevel: studentGrade,
+            'schedule.startTime': { $gt: now }
         })
         .populate('subject tutor')
         .sort('schedule.startTime')
         .limit(5);
 
-        // Get assignments and assessments
-        const assignments = await Assignment.find({
-            subject: { $in: student.subjects },
-            dueDate: { $gt: today }
-        }).populate('subject');
+        // Get active enrollments with subjects for the current academic year
+        const enrollments = await Enrollment.find({
+            student: studentId,
+            status: 'active',
+            academicYear: academicYear
+        })
+        .populate({
+            path: 'subject',
+            populate: {
+                path: 'tutor',
+                select: 'name email'
+            }
+        });
 
-        const assessments = await Assessment.find({
-            subject: { $in: student.subjects },
-            dueDate: { $gt: today }
-        }).populate('subject');
+        // If no enrollments found but student has subjects, create enrollments
+        if (enrollments.length === 0 && student.subjects.length > 0) {
+            const enrollmentPromises = student.subjects.map(subject => 
+                Enrollment.create({
+                    student: studentId,
+                    subject: subject._id,
+                    gradeLevel: studentGrade,
+                    academicYear,
+                    status: 'active'
+                })
+            );
+            await Promise.all(enrollmentPromises);
+        }
 
         // Calculate attendance
         const attendanceRecords = await Attendance.find({
@@ -382,6 +418,19 @@ exports.getStudentDashboard = async (req, res, next) => {
 
         const attendancePercentage = totalClasses ? (presentClasses / totalClasses) * 100 : 0;
 
+        // Ensure we're sending the most up-to-date enrollments
+        const finalEnrollments = await Enrollment.find({
+            student: studentId,
+            status: 'active',
+            academicYear: academicYear
+        }).populate({
+            path: 'subject',
+            populate: {
+                path: 'tutor',
+                select: 'name email'
+            }
+        });
+
         res.status(200).json({
             status: 'success',
             data: {
@@ -393,7 +442,7 @@ exports.getStudentDashboard = async (req, res, next) => {
                 },
                 dashboard: {
                     schedule: [{
-                        date: today.toISOString(),
+                        date: startOfDay.toISOString(),
                         lessons: todayLessons
                     }],
                     upcomingLessons,
@@ -401,9 +450,9 @@ exports.getStudentDashboard = async (req, res, next) => {
                         records: attendanceRecords,
                         percentage: attendancePercentage
                     },
-                    activeAssignments: assignments,
-                    upcomingAssessments: assessments,
-                    enrollments
+                    activeAssignments: [],
+                    upcomingAssessments: [],
+                    enrollments: finalEnrollments
                 }
             }
         });
@@ -413,6 +462,7 @@ exports.getStudentDashboard = async (req, res, next) => {
         next(new AppError('Error fetching student dashboard', 500));
     }
 };
+
 exports.getTutorDashboard = async (req, res, next) => {
     try {
         console.log('Received tutor dashboard request for user:', req.user);
