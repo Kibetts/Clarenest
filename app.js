@@ -165,18 +165,19 @@ mongoose.set('strictQuery', false);
 
 // MongoDB
 const startServer = async () => {
+    const port = process.env.PORT || 5000;
+    
+    // Start server first
+    const server = app.listen(port, '0.0.0.0', () => {
+        console.log(`Server running on port ${port}`);
+    });
+
     try {
         // Setup MongoDB connection handlers
         setupConnectionHandlers();
         
         // Attempt to connect to MongoDB
         await connectWithRetry();
-
-        // Start server only after successful database connection
-        const port = process.env.PORT || 5000;
-        const server = app.listen(port, () => {
-            console.log(`Server running on port ${port}`);
-        });
 
         // Handle server shutdown
         const gracefulShutdown = async () => {
@@ -194,18 +195,13 @@ const startServer = async () => {
             }
         };
 
-        // Handle various shutdown signals
         process.on('SIGTERM', gracefulShutdown);
         process.on('SIGINT', gracefulShutdown);
-        process.on('unhandledRejection', (err) => {
-            console.log('UNHANDLED REJECTION! Shutting down...');
-            console.error(err);
-            gracefulShutdown();
-        });
 
     } catch (error) {
-        console.error('Failed to start server:', error);
-        process.exit(1);
+        console.error('Failed to connect to database:', error);
+        // Don't exit - let the server keep running even if DB connection fails
+        console.log('Server will continue running and retry DB connection');
     }
 };
 
