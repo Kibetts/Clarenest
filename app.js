@@ -53,11 +53,17 @@ if (process.env.NODE_ENV === 'development') {
 
 // CORS
 const corsOptions = {
-    origin: process.env.FRONTEND_URL ,
+    origin: [
+        'https://www.clarenestschool.co.ke',
+        'https://clarenestschool.co.ke',
+        'https://clarenestfrontend-ohee.onrender.com',
+        'http://localhost:3000'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 };
+
 app.use(cors(corsOptions));
 
 
