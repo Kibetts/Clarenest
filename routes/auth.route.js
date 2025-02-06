@@ -4,7 +4,7 @@ const applicationController = require('../controller/application.controller');
 const parentController = require('../controller/parent.controller')
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
-const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
+// const { authenticateJWT, authorizeRoles } = require('../middleware/auth.middleware');
 const { ROLES } = require('../config/roles');
 const checkDatabaseConnection = require('../middleware/database.middleware');
 router.use(checkDatabaseConnection);

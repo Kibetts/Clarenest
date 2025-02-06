@@ -1,15 +1,19 @@
 const jwt = require('jsonwebtoken');
-const { promisify } = require('util');
 const User = require('../models/user.model');
+const { promisify } = require('util');
 
 exports.authenticateJWT = async (req, res, next) => {
     try {
+        console.log('Auth headers:', req.headers.authorization); // Debug log
+
         let token;
-        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
             token = req.headers.authorization.split(' ')[1];
+            console.log('Extracted token:', token); // Debug log
         }
 
         if (!token) {
+            console.log('No token found in request'); // Debug log
             return res.status(401).json({ 
                 status: 'error',
                 message: 'No token provided. Please log in.',
@@ -18,8 +22,12 @@ exports.authenticateJWT = async (req, res, next) => {
         }
 
         try {
+            console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET); // Debug log
             const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+            console.log('Decoded token:', decoded); // Debug log
+
             const currentUser = await User.findById(decoded.id);
+            console.log('Found user:', !!currentUser); // Debug log
             
             if (!currentUser) {
                 return res.status(401).json({
@@ -32,6 +40,7 @@ exports.authenticateJWT = async (req, res, next) => {
             req.user = currentUser;
             next();
         } catch (err) {
+            console.error('Token verification error:', err); // Debug log
             if (err.name === 'TokenExpiredError') {
                 return res.status(401).json({
                     status: 'error',
@@ -66,39 +75,4 @@ exports.requireEmailVerification = (req, res, next) => {
     }
     next();
 };
-
-// exports.auth = async (req, res, next) => {
-//     try {
-//         // Get token from header
-//         const token = req.headers.authorization?.split(' ')[1];
-        
-//         if (!token) {
-//             return res.status(401).json({
-//                 status: 'fail',
-//                 message: 'No auth token provided'
-//             });
-//         }
-
-//         // Verify token
-//         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        
-//         // Find user
-//         const user = await User.findById(decoded.id);
-//         if (!user) {
-//             return res.status(401).json({
-//                 status: 'fail',
-//                 message: 'User not found'
-//             });
-//         }
-
-//         // Attach user to request
-//         req.user = user;
-//         next();
-//     } catch (err) {
-//         res.status(401).json({
-//             status: 'fail',
-//             message: 'Invalid token'
-//         });
-//     }
-// };
 

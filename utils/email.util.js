@@ -74,7 +74,7 @@ const sendEmail = async (options) => {
         const msg = {
             from: {
                 name: 'Clarenest International School',
-                address: process.env.EMAIL_FROM || 'clarenestschool@gmail.com'
+                address: process.env.EMAIL_FROM || 'admin@clarenestschool.co.ke'
             },
             to: options.email,
             subject: options.subject,

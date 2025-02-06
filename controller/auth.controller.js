@@ -246,71 +246,7 @@ exports.register = async (req, res, next) => {
     }
 };
 
-// exports.login = async (req, res, next) => {
-//     try {
-//         const { email, password } = req.body;
 
-//         // Check if email and password exist
-//         if (!email || !password) {
-//             return next(new AppError('Please provide email and password', 400));
-//         }
-
-//         // Find user and include password field
-//         const baseUser = await User.findOne({ email }).select('+password');
-
-//         if (!baseUser || !(await baseUser.correctPassword(password, baseUser.password))) {
-//             return next(new AppError('Incorrect email or password', 401));
-//         }
-
-//         // Get the full user document from the appropriate model based on role
-//         let fullUser;
-//         switch (baseUser.role) {
-//             case 'student':
-//                 fullUser = await Student.findById(baseUser._id);
-//                 break;
-//             case 'tutor':
-//                 fullUser = await Tutor.findById(baseUser._id);
-//                 break;
-//             case 'parent':
-//                 fullUser = await Parent.findById(baseUser._id);
-//                 break;
-//             case 'admin':
-//                 fullUser = await Admin.findById(baseUser._id);
-//                 break;
-//             default:
-//                 fullUser = baseUser;
-//         }
-
-//         if (!fullUser) {
-//             return next(new AppError(`${baseUser.role} account not found`, 404));
-//         }
-
-//         // Create token
-//         const token = signToken(fullUser._id);
-
-//         // Update last active timestamp
-//         fullUser.lastActive = new Date();
-//         await fullUser.save({ validateBeforeSave: false });
-
-//         // Send response
-//         res.status(200).json({
-//             status: 'success',
-//             token,
-//             data: {
-//                 user: {
-//                     id: fullUser._id,
-//                     name: fullUser.name,
-//                     email: fullUser.email,
-//                     role: fullUser.role,
-//                     status: fullUser.status
-//                 }
-//             }
-//         });
-//     } catch (err) {
-//         console.error('Login error:', err);
-//         next(new AppError('Error during login', 500));
-//     }
-// };
 
 exports.login = async (req, res, next) => {
     try {
