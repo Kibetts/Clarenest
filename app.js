@@ -42,6 +42,7 @@ const testimonialRoutes = require('./routes/testimonial.route');
 
 
 const app = express();
+app.enable('trust proxy');
 
 // Logging 
 if (process.env.NODE_ENV === 'development') {
@@ -86,10 +87,14 @@ app.use(
 );
 
 const limiter = rateLimit({
-    max: 100,
-    windowMs: 60 * 60 * 1000,
-    message: 'Too many requests from this IP, please try again in an hour!'
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    trustProxy: true 
 });
+
+
 app.use('/api', limiter);
 
 app.use(express.json({ limit: '10kb' }));
