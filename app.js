@@ -186,23 +186,34 @@ const startServer = async () => {
         await connectWithRetry();
 
         // Handle server shutdown
-        const gracefulShutdown = async () => {
-            console.log('Received shutdown signal...');
+        const gracefulShutdown = async (signal) => {
+            console.log(`\n${signal} received. Starting graceful shutdown...`);
             try {
-                await mongoose.connection.close();
-                console.log('MongoDB connection closed');
-                server.close(() => {
-                    console.log('Server closed');
-                    process.exit(0);
-                });
+                // Close MongoDB connection
+                if (mongoose.connection.readyState === 1) {
+                    await mongoose.connection.close();
+                    console.log('MongoDB connection closed');
+                }
+                
+                // Exit process
+                process.exit(0);
             } catch (err) {
                 console.error('Error during shutdown:', err);
                 process.exit(1);
             }
         };
-
-        process.on('SIGTERM', gracefulShutdown);
-        process.on('SIGINT', gracefulShutdown);
+        
+        // Handle various shutdown signals
+        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+        process.on('uncaughtException', (err) => {
+            console.error('Uncaught Exception:', err);
+            gracefulShutdown('uncaughtException');
+        });
+        process.on('unhandledRejection', (err) => {
+            console.error('Unhandled Rejection:', err);
+            gracefulShutdown('unhandledRejection');
+        });
 
     } catch (error) {
         console.error('Failed to connect to database:', error);
