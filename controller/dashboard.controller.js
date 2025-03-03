@@ -8,8 +8,7 @@ const Assessment = require('../models/assessment.model');
 const Result = require('../models/result.model');
 const Attendance = require('../models/attendance.model');
 const Message = require('../models/message.model');
-const CourseMaterial = require('../models/courseMaterial.model');
-const Announcement = require('../models/announcement.model');
+const CourseMaterial = require('../models/courseMaterial.model').default || require('../models/courseMaterial.model');const Announcement = require('../models/announcement.model');
 const StudentApplication = require('../models/studentApplication.model');
 const TutorApplication = require('../models/tutorApplication.model');
 const User = require('../models/user.model');
@@ -17,295 +16,7 @@ const FeePayment = require('../models/feePayment.model');
 const Notification = require('../models/notification.model');
 const AppError = require('../utils/appError');
 const Enrollment = require('../models/enrollment.model');
-
 const { enrollStudentInGradeSubjects } = require('../services/enrollment.service');
-
-// exports.getStudentDashboard = async (req, res, next) => {
-//     try {
-//         console.log('Received student dashboard request for user:', req.user);
-        
-//         let student = await Student.findById(req.user._id);
-        
-//         console.log('Found student:', student);
-
-//         if (!student) {
-//             return next(new AppError('Student not found', 404));
-//         }
-
-//         // Get current date for queries
-//         const now = new Date();
-
-//         // Default empty arrays for error handling
-//         let dashboardData = {
-//             upcomingLessons: [],
-//             activeAssignments: [],
-//             upcomingAssessments: [],
-//             recentGrades: [],
-//             attendanceRecords: [],
-//             courseMaterials: [],
-//             unreadMessages: 0,
-//             announcements: [],
-//             schedule: []
-//         };
-
-//         try {
-//             // Fetch all dashboard data in parallel using Promise.all
-//             const [
-//                 upcomingLessons,
-//                 activeAssignments,
-//                 upcomingAssessments,
-//                 recentGrades,
-//                 attendanceRecords,
-//                 courseMaterials,
-//                 unreadMessages,
-//                 announcements,
-//                 weekSchedule
-//             ] = await Promise.all([
-//                 Lesson.find({
-//                     students: student._id,
-//                     startTime: { $gte: now }
-//                 })
-//                 .populate('subject tutor')
-//                 .sort('startTime')
-//                 .limit(5)
-//                 .lean()
-//                 .catch(() => []),
-
-//                 Assignment.find({
-//                     'submissions.student': { $ne: student._id },
-//                     dueDate: { $gte: now }
-//                 })
-//                 .populate('subject')
-//                 .sort('dueDate')
-//                 .lean()
-//                 .catch(() => []),
-
-//                 Assessment.find({
-//                     subject: { $in: student.subjects || [] },
-//                     dueDate: { $gte: now }
-//                 })
-//                 .populate('subject')
-//                 .lean()
-//                 .catch(() => []),
-
-//                 Result.find({ student: student._id })
-//                 .populate('subject')
-//                 .sort('-issuedDate')
-//                 .limit(5)
-//                 .lean()
-//                 .catch(() => []),
-
-//                 Attendance.find({
-//                     'attendees.student': student._id
-//                 })
-//                 .populate({
-//                     path: 'lesson',
-//                     populate: {
-//                         path: 'subject tutor'
-//                     }
-//                 })
-//                 .sort('-date')
-//                 .lean()
-//                 .catch(() => []),
-
-//                 CourseMaterial.find({
-//                     subject: { $in: student.subjects || [] },
-//                     gradeLevel: student.grade,
-//                     isActive: true
-//                 })
-//                 .populate('subject uploadedBy')
-//                 .sort('-createdAt')
-//                 .lean()
-//                 .catch(() => []),
-
-//                 Message.countDocuments({
-//                     recipient: student._id,
-//                     read: false
-//                 }).catch(() => 0),
-
-//                 Announcement.find({
-//                     $or: [
-//                         { recipientType: 'all' },
-//                         { recipientType: 'students' },
-//                         { recipientType: 'specific', recipients: student._id }
-//                     ],
-//                     expiryDate: { $gte: now }
-//                 })
-//                 .sort('-createdAt')
-//                 .limit(5)
-//                 .lean()
-//                 .catch(() => []),
-
-//                 Lesson.aggregate([
-//                     {
-//                         $match: {
-//                             students: student._id,
-//                             startTime: { 
-//                                 $gte: now,
-//                                 $lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-//                             }
-//                         }
-//                     },
-//                     {
-//                         $group: {
-//                             _id: { $dateToString: { format: "%Y-%m-%d", date: "$startTime" } },
-//                             lessons: { $push: "$$ROOT" }
-//                         }
-//                     },
-//                     { $sort: { "_id": 1 } },
-//                     { $limit: 7 }
-//                 ]).catch(() => [])
-//             ]);
-
-//             // Update dashboardData with fetched data
-//             dashboardData = {
-//                 upcomingLessons,
-//                 activeAssignments,
-//                 upcomingAssessments,
-//                 recentGrades,
-//                 attendanceRecords,
-//                 courseMaterials,
-//                 unreadMessages,
-//                 announcements,
-//                 schedule: weekSchedule
-//             };
-//         } catch (error) {
-//             console.error('Error fetching dashboard data:', error);
-//             // Continue with default empty values if there's an error
-//         }
-
-//         // Calculate overall grade
-//         const allResults = dashboardData.recentGrades || [];
-//         const overallGrade = allResults.length > 0 
-//             ? allResults.reduce((sum, result) => sum + result.score, 0) / allResults.length 
-//             : null;
-
-//         // Calculate attendance percentage
-//         const attendancePercentage = dashboardData.attendanceRecords.length > 0
-//             ? (dashboardData.attendanceRecords.filter(a => 
-//                 a.attendees.find(att => 
-//                     att.student.toString() === student._id.toString() && 
-//                     att.status === 'Present'
-//                 )
-//             ).length / dashboardData.attendanceRecords.length) * 100
-//             : 0;
-
-//         // Prepare and send response
-//         res.status(200).json({
-//             status: 'success',
-//             data: {
-//                 student: {
-//                     id: student._id,
-//                     name: student.name,
-//                     email: student.email,
-//                     grade: student.grade,
-//                     subjects: student.subjects || [],
-//                     status: student.status,
-//                     lastActive: student.lastActive
-//                 },
-//                 dashboard: {
-//                     ...dashboardData,
-//                     overallGrade,
-//                     attendance: {
-//                         records: dashboardData.attendanceRecords,
-//                         percentage: attendancePercentage
-//                     }
-//                 }
-//             }
-//         });
-
-//     } catch (err) {
-//         console.error('Student Dashboard Error:', err);
-//         next(new AppError('Error fetching student dashboard: ' + (err.message || 'Unknown error'), 500));
-//     }
-// };
-
-
-// exports.getStudentDashboard = async (req, res, next) => {
-//     try {
-//         let student = await Student.findById(req.user._id)
-//             .populate('subjects');
-        
-//         if (!student) {
-//             return next(new AppError('Student not found', 404));
-//         }
-
-//         const now = new Date();
-
-//         // Fetch lessons with proper population
-//         const upcomingLessons = await Lesson.find({
-//             students: student._id,
-//             'schedule.startTime': { $gte: now }
-//         })
-//         .populate('subject tutor')
-//         .sort('schedule.startTime')
-//         .limit(5);
-
-//         // Calculate attendance
-//         const attendanceRecords = await Attendance.find({
-//             'attendees.student': student._id
-//         });
-
-//         const attendancePercentage = attendanceRecords.length > 0
-//             ? (attendanceRecords.filter(a => 
-//                 a.attendees.find(att => 
-//                     att.student.toString() === student._id.toString() && 
-//                     att.status === 'Present'
-//                 )
-//             ).length / attendanceRecords.length) * 100
-//             : 0;
-
-//         // Get recent grades
-//         const recentGrades = await Result.find({ student: student._id })
-//             .populate('subject')
-//             .sort('-createdAt')
-//             .limit(5);
-
-//         const overallGrade = recentGrades.length > 0
-//             ? recentGrades.reduce((sum, grade) => sum + grade.score, 0) / recentGrades.length
-//             : null;
-
-//         // Get today's schedule
-//         const today = new Date();
-//         const todayStart = new Date(today.setHours(0, 0, 0, 0));
-//         const todayEnd = new Date(today.setHours(23, 59, 59, 999));
-
-//         const todaySchedule = await Lesson.find({
-//             students: student._id,
-//             'schedule.startTime': { $gte: todayStart, $lte: todayEnd }
-//         })
-//         .populate('subject tutor')
-//         .sort('schedule.startTime');
-
-//         res.status(200).json({
-//             status: 'success',
-//             data: {
-//                 student: {
-//                     id: student._id,
-//                     name: student.name,
-//                     email: student.email,
-//                     grade: student.grade
-//                 },
-//                 dashboard: {
-//                     upcomingLessons,
-//                     attendance: {
-//                         records: attendanceRecords,
-//                         percentage: attendancePercentage
-//                     },
-//                     recentGrades,
-//                     overallGrade,
-//                     schedule: [{
-//                         _id: today.toISOString().split('T')[0],
-//                         lessons: todaySchedule
-//                     }]
-//                 }
-//             }
-//         });
-
-//     } catch (err) {
-//         next(new AppError('Error fetching student dashboard', 500));
-//     }
-// };
 
 exports.getStudentDashboard = async (req, res, next) => {
     try {
@@ -1091,3 +802,227 @@ exports.getAssessmentStatistics = async (assessmentId) => {
     };
 };
 
+exports.getStudentCourses = async (req, res, next) => {
+    try {
+        const student = await Student.findById(req.user._id)
+            .populate('subjects')
+            .populate({
+                path: 'enrollments',
+                populate: {
+                    path: 'subject',
+                    populate: { path: 'tutor', select: 'name email' }
+                }
+            });
+
+        if (!student) {
+            return next(new AppError('Student not found', 404));
+        }
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                courses: student.subjects,
+                enrollments: student.enrollments
+            }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching student courses', 500));
+    }
+};
+
+exports.getCourseMaterials = async (req, res, next) => {
+    try {
+        const student = await Student.findById(req.user._id)
+            .populate('subjects');
+            
+        if (!student) {
+            return next(new AppError('Student not found', 404));
+        }
+
+        const materials = await CourseMaterial.find({
+            $or: [
+                { subject: { $in: student.subjects.map(s => s._id) } },
+                { gradeLevel: student.grade }
+            ],
+            isActive: true
+        })
+        .populate('subject')
+        .populate('uploadedBy', 'name')
+        .sort('-createdAt');
+
+        res.status(200).json({
+            status: 'success',
+            data: { materials }
+        });
+    } catch (err) {
+        console.error('Course materials error:', err);
+        next(new AppError('Error fetching course materials', 500));
+    }
+};
+
+exports.getStudentAssignments = async (req, res, next) => {
+    try {
+        const student = await Student.findById(req.user._id);
+        if (!student) {
+            return next(new AppError('Student not found', 404));
+        }
+
+        const assignments = await Assignment.find({
+            'submissions.student': { $ne: student._id },
+            dueDate: { $gte: new Date() }
+        })
+        .populate('subject tutor')
+        .sort('dueDate');
+
+        res.status(200).json({
+            status: 'success',
+            data: { assignments }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching assignments', 500));
+    }
+};
+
+exports.getStudentAssessments = async (req, res, next) => {
+    try {
+        const student = await Student.findById(req.user._id);
+        if (!student) {
+            return next(new AppError('Student not found', 404));
+        }
+
+        const assessments = await Assessment.find({
+            subject: { $in: student.subjects },
+            dueDate: { $gte: new Date() }
+        })
+        .populate('subject')
+        .sort('dueDate');
+
+        res.status(200).json({
+            status: 'success',
+            data: { assessments }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching assessments', 500));
+    }
+};
+
+exports.getStudentGrades = async (req, res, next) => {
+    try {
+        const student = await Student.findById(req.user._id);
+        if (!student) {
+            return next(new AppError('Student not found', 404));
+        }
+
+        const [assessments, results] = await Promise.all([
+            Assessment.find({
+                subject: { $in: student.subjects },
+                dueDate: { $gt: new Date() }
+            }).populate('subject'),
+            
+            Result.find({ student: student._id })
+                .populate('subject')
+                .sort('-issuedDate')
+        ]);
+
+        // Calculate overall grade
+        const overallGrade = results.length > 0
+            ? results.reduce((sum, result) => sum + result.score, 0) / results.length
+            : null;
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                assessments,
+                results,
+                overallGrade
+            }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching grades', 500));
+    }
+};
+
+exports.getStudentAttendance = async (req, res, next) => {
+    try {
+        const studentId = req.user._id;
+        
+        const attendanceRecords = await Attendance.find({
+            'attendees.student': studentId
+        })
+        .populate({
+            path: 'lesson',
+            populate: { 
+                path: 'subject tutor',
+                select: 'name title'
+            }
+        })
+        .sort('-date');
+
+        if (!attendanceRecords) {
+            return res.status(200).json({
+                status: 'success',
+                data: {
+                    records: [],
+                    statistics: {
+                        totalClasses: 0,
+                        presentClasses: 0,
+                        percentage: 0
+                    }
+                }
+            });
+        }
+
+        const totalClasses = attendanceRecords.length;
+        const presentClasses = attendanceRecords.filter(record => 
+            record.attendees.find(att => 
+                att.student.toString() === studentId.toString() && 
+                att.status === 'Present'
+            )
+        ).length;
+
+        const attendancePercentage = totalClasses ? (presentClasses / totalClasses) * 100 : 0;
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                records: attendanceRecords,
+                statistics: {
+                    totalClasses,
+                    presentClasses,
+                    percentage: attendancePercentage
+                }
+            }
+        });
+    } catch (err) {
+        console.error('Attendance error:', err);
+        next(new AppError('Error fetching attendance', 500));
+    }
+};
+
+exports.getStudentMessages = async (req, res, next) => {
+    try {
+        const messages = await Message.find({
+            $or: [
+                { recipient: req.user._id },
+                { sender: req.user._id }
+            ]
+        })
+        .populate('sender recipient', 'name role')
+        .sort('-createdAt');
+
+        const unreadCount = await Message.countDocuments({
+            recipient: req.user._id,
+            read: false
+        });
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                messages,
+                unreadCount
+            }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching messages', 500));
+    }
+};

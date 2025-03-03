@@ -102,23 +102,23 @@ exports.deleteAssessment = async (req, res, next) => {
 
 exports.getStudentAssessments = async (req, res, next) => {
     try {
-        const student = await Student.findById(req.user._id)
-            .populate('grade')
-            .select('+isEmailVerified +verificationToken +verificationTokenExpires');
+        const student = await Student.findById(req.user._id);
         if (!student) {
             return next(new AppError('Student not found', 404));
         }
+
         const assessments = await Assessment.find({
-            gradeLevel: student.grade,
-            isActive: true,
+            subject: { $in: student.subjects },
             dueDate: { $gte: new Date() }
         }).populate('subject');
+
         res.status(200).json({
             status: 'success',
             data: { assessments }
         });
     } catch (err) {
-        next(new AppError('Error fetching student assessments', 500));
+        console.error('Error fetching student assessments:', err);
+        next(new AppError('Error fetching assessments', 500));
     }
 };
 

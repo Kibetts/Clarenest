@@ -42,7 +42,7 @@ const testimonialRoutes = require('./routes/testimonial.route');
 
 
 const app = express();
-app.enable('trust proxy');
+// app.enable('trust proxy');
 
 // Logging 
 if (process.env.NODE_ENV === 'development') {
@@ -149,6 +149,7 @@ app.use('/api/users', userRoutes);
 
 
 
+
 app.use((err, req, res, next) => {
     console.error('Error:', err);
     res.status(err.statusCode || 500).json({
@@ -203,14 +204,14 @@ const startServer = async () => {
         // Handle various shutdown signals
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-        process.on('uncaughtException', (err) => {
-            console.error('Uncaught Exception:', err);
-            gracefulShutdown('uncaughtException');
-        });
-        process.on('unhandledRejection', (err) => {
-            console.error('Unhandled Rejection:', err);
-            gracefulShutdown('unhandledRejection');
-        });
+        // process.on('uncaughtException', (err) => {
+        //     console.error('Uncaught Exception:', err);
+        //     gracefulShutdown('uncaughtException');
+        // });
+        // process.on('unhandledRejection', (err) => {
+        //     console.error('Unhandled Rejection:', err);
+        //     gracefulShutdown('unhandledRejection');
+        // });
 
     } catch (error) {
         console.error('Failed to connect to database:', error);

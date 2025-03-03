@@ -86,21 +86,20 @@ const lessonSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Student'
     }],
-    schedule: [{
-        day: {
-            type: String,
-            enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-            required: true
-        },
-        startTime: {
-            type: Date,
-            required: true
-        },
-        endTime: {
-            type: Date,
-            required: true
-        }
-    }],
+schedule: [{
+    day: {
+        type: String,
+        enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    },
+    startTime: {
+        type: Date,
+        required: true
+    },
+    endTime: {
+        type: Date,
+        required: true
+    }
+}],
     capacity: {
         type: Number,
         required: true,

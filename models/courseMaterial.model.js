@@ -24,10 +24,10 @@ const courseMaterialSchema = new mongoose.Schema({
         required: true
     },
     gradeLevel: {
-        type: Number,
+        type: String,
         required: true,
-        min: 1,
-        max: 12
+        enum: ['1st', '2nd', '3rd', '4th', '5th', '6th', 
+               '7th', '8th', '9th', '10th', '11th', '12th']
     },
     isActive: {
         type: Boolean,

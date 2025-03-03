@@ -14,7 +14,7 @@ router
 
 router
     .route('/:id')
-    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), attendanceController.getAttendance)
+    .get(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR, ROLES.STUDENT, ROLES.PARENT), attendanceController.getStudentAttendance)
     .patch(authorizeRoles(ROLES.ADMIN, ROLES.TUTOR), attendanceController.updateAttendance)
     .delete(authorizeRoles(ROLES.ADMIN), attendanceController.deleteAttendance);
 

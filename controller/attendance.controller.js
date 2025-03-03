@@ -18,15 +18,25 @@ exports.createAttendance = async (req, res, next) => {
     });
 };
 
-exports.getAttendance = async (req, res, next) => {
-    const attendance = await Attendance.findById(req.params.id).populate('lesson');
-    if (!attendance) {
-        return next(new AppError('No attendance found with that ID', 404));
+// Add this method to attendance.controller.js
+exports.getStudentAttendance = async (req, res, next) => {
+    try {
+        const attendances = await Attendance.find({
+            'attendees.student': req.user._id
+        })
+        .populate({
+            path: 'lesson',
+            populate: { path: 'subject tutor' }
+        })
+        .sort('-date');
+
+        res.status(200).json({
+            status: 'success',
+            data: { attendances }
+        });
+    } catch (err) {
+        next(new AppError('Error fetching student attendance', 500));
     }
-    res.status(200).json({
-        status: 'success',
-        data: { attendance }
-    });
 };
 
 exports.updateAttendance = async (req, res, next) => {
